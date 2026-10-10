@@ -263,7 +263,7 @@ else if (master.get_digital(DIGITAL_L2)) {
   arm.move(-127);
 }
 else {
-  arm.move(0);}sorrso
+  arm.move(0);}
     pros::delay(ez::util::DELAY_TIME);  // This is used for timer calculations!  Keep this ez::util::DELAY_TIME
   }
 }
