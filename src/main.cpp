@@ -8,7 +8,9 @@
 // Chassis constructor
 ez::Drive chassis(
     // These are your drive motors, the first motor is used for sensing!
-    {-10, -20},     // Left Chassis Ports (negative port will reverse it!)
+    // TODO: port 10 is listed on BOTH sides below. One motor can't be on both, so the
+    // drive fights itself. Check Brain -> Devices, then fix the side it's NOT on.
+    {-10, -20},    // Left Chassis Ports (negative port will reverse it!)
     {1, 10},  // Right Chassis Ports (negative port will reverse it!)
 
     17,      // IMU Port
@@ -51,6 +53,9 @@ void initialize() {
 
   // Set the drive to your own constants from autons.cpp!
   default_constants();
+
+  // Hold the DR4B where it stops instead of letting it fall under its own weight
+  arm.set_brake_mode_all(pros::E_MOTOR_BRAKE_HOLD);
 
   // These are already defaulted to these buttons, but you can change the left/right curve buttons here!
   // chassis.opcontrol_curve_buttons_left_set(pros::E_CONTROLLER_DIGITAL_LEFT, pros::E_CONTROLLER_DIGITAL_RIGHT);  // If using tank, only the left side is used.
@@ -256,14 +261,15 @@ void opcontrol() {
     // . . .
     // Put more user control code here!
     // . . .
- if (master.get_digital(DIGITAL_L1)) {
-  arm.move(127);
-}
-else if (master.get_digital(DIGITAL_L2)) {
-  arm.move(-127);
-}
-else {
-  arm.move(0);}
+    // DR4B arm: L1 up, L2 down, holds position otherwise
+    if (master.get_digital(DIGITAL_L1)) {
+      arm.move(127);
+    } else if (master.get_digital(DIGITAL_L2)) {
+      arm.move(-127);
+    } else {
+      arm.brake();
+    }
+
     pros::delay(ez::util::DELAY_TIME);  // This is used for timer calculations!  Keep this ez::util::DELAY_TIME
   }
 }
