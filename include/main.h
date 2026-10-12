@@ -46,6 +46,7 @@
 // More includes here...
 #include "autons.hpp"
 #include "subsystems.hpp"
+#include "hud.hpp"
 
 
 /**
