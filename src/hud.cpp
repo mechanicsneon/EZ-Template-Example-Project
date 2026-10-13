@@ -185,8 +185,15 @@ std::string controller_line(const Status &s, int line) {
     return buf;
   }
   if (line == 1) {
-    if (auto *w = current_warning(s)) return w->text;
-    return "AUTO:" + s.auton;
+    if (s.mode != DRIVER) {
+      if (auto *w = current_warning(s)) return w->text;
+      return "AUTO:" + s.auton;
+    }
+    // Driver control: lift status (NEXT H2, SAVED H2 640...), taking turns with any warnings
+    std::string lift_text = lift::status_text();
+    if (lift::status_is_new() || s.warnings.empty()) return lift_text;
+    size_t i = (pros::millis() / 2000) % (s.warnings.size() + 1);
+    return i < s.warnings.size() ? s.warnings[i].text : lift_text;
   }
   return "DRV " + hottest(s, true) + " ARM " + hottest(s, false);
 }
@@ -259,7 +266,7 @@ lv_obj_t *selector_screen = nullptr;  // EZ-Template's auton selector (LLEMU)
 lv_obj_t *mode_pill, *mode_label, *timer_label, *subtitle, *warning_pill, *warning_label;
 lv_obj_t *battery_label, *battery_bar, *controller_label, *imu_label;
 lv_obj_t *tiles[MAX_TILES], *tile_names[MAX_TILES], *tile_temps[MAX_TILES];
-lv_obj_t *auton_label;
+lv_obj_t *auton_label, *lift_label;
 
 lv_obj_t *box(lv_obj_t *parent, int x, int y, int w, int h, lv_color_t color, int radius = 8) {
   lv_obj_t *o = lv_obj_create(parent);
@@ -352,6 +359,7 @@ void build_hud_screen() {
   auton_label = text(auton, 10, 22, &lv_font_montserrat_20, TEXT, "");
   lv_obj_set_width(auton_label, 300);
   lv_label_set_long_mode(auton_label, LV_LABEL_LONG_DOT);
+  lift_label = text(auton, 120, 6, &lv_font_montserrat_12, CYAN, "");
   lv_obj_t *pick = button(auton, "PICK AUTON", [](lv_event_t *) { screen_choice = SHOW_SELECTOR; });
   lv_obj_set_size(pick, 130, 38);
   lv_obj_align(pick, LV_ALIGN_RIGHT_MID, -7, 0);
@@ -420,6 +428,7 @@ void update_hud(const Status &s) {
   }
 
   lv_label_set_text(auton_label, s.auton.c_str());
+  lv_label_set_text_fmt(lift_label, "LIFT %d\xC2\xB0   %s", (int)lift::position(), lift::status_text().c_str());
 }
 
 // Runs inside LVGL's own task, so it's safe to touch the screen here

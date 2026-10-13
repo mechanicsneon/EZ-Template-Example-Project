@@ -54,8 +54,8 @@ void initialize() {
   // Set the drive to your own constants from autons.cpp!
   default_constants();
 
-  // Hold the DR4B where it stops instead of letting it fall under its own weight
-  arm.set_brake_mode_all(pros::E_MOTOR_BRAKE_HOLD);
+  // DR4B lift: saved heights + place macro (see lift.cpp). Start with the lift all the way down!
+  lift::initialize();
 
   // These are already defaulted to these buttons, but you can change the left/right curve buttons here!
   // chassis.opcontrol_curve_buttons_left_set(pros::E_CONTROLLER_DIGITAL_LEFT, pros::E_CONTROLLER_DIGITAL_RIGHT);  // If using tank, only the left side is used.
@@ -257,7 +257,8 @@ void opcontrol() {
     // Gives you some extras to make EZ-Template ezier
     ez_template_extras();
 
-    chassis.opcontrol_tank();  // Tank control
+    if (!lift::drive_busy())     // The place macro drives the robot back on its own
+      chassis.opcontrol_tank();  // Tank control
     // chassis.opcontrol_arcade_standard(ez::SPLIT);   // Standard split arcade
     // chassis.opcontrol_arcade_standard(ez::SINGLE);  // Standard single arcade
     // chassis.opcontrol_arcade_flipped(ez::SPLIT);    // Flipped split arcade
@@ -266,14 +267,8 @@ void opcontrol() {
     // . . .
     // Put more user control code here!
     // . . .
-    // DR4B arm: L1 up, L2 down, holds position otherwise
-    if (master.get_digital(DIGITAL_L1)) {
-      arm.move(127);
-    } else if (master.get_digital(DIGITAL_L2)) {
-      arm.move(-127);
-    } else {
-      arm.brake();
-    }
+    // DR4B lift: L1/L2 manual, R1 place, A+R1 save height, R2 down, UP/DOWN/Y pick height
+    lift::opcontrol();
 
     pros::delay(ez::util::DELAY_TIME);  // This is used for timer calculations!  Keep this ez::util::DELAY_TIME
   }
