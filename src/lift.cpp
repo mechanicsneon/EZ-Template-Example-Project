@@ -29,14 +29,6 @@ constexpr int JOYSTICK_CANCEL = 20;  // Pushing a stick past this during the bac
 constexpr int MESSAGE_MS = 1500;     // How long the HUD shows a new message
 const char *HEIGHTS_FILE = "/usd/lift_heights.txt";
 
-// Let go of the game piece. Fill this in once the claw is wired up
-void release_piece() {
-  // TODO claw: tilt forward / open / flip here, for example
-  //   claw.set_value(false);
-  //   pros::delay(250);
-  pros::delay(300);  // Stand-in so the macro pauses where the release will go
-}
-
 /////
 // State
 /////
@@ -85,33 +77,52 @@ void go_to(double deg) {
   mode = TARGET;
 }
 
-// Runs all the time: drives the lift to its target, then locks the motors there
+// Runs all the time: drives the lift to its target, then locks the motors there.
+// This is the only place that powers the lift outside of manual control, so nothing
+// else can leave the motors running.
 void lift_task() {
   double active_target = NAN;
   uint32_t close_since = 0;
+  uint32_t move_start = 0;
 
   while (true) {
+    // Disabled by the field: drop any move or macro so nothing starts up on its own
+    // when the robot is enabled again (PROS doesn't stop our tasks when disabled)
+    if (pros::competition::is_disabled()) {
+      if (macro_running) cancel = true;
+      busy_drive = false;
+      if (mode == TARGET) mode = HOLD;
+    }
+
     if (mode == TARGET) {
       double t = target;
+      double pos = read_position();
       if (t != active_target) {
+        // Sync the PID's last position first so the lift moving by hand since the
+        // last PID move doesn't look like a sudden jump (that would kick the D term)
+        lift_pid.compute(pos);
         lift_pid.variables_reset();
         lift_pid.target_set(t);
         active_target = t;
         close_since = 0;
+        move_start = pros::millis();
       }
 
-      double pos = read_position();
       arm.move(std::clamp(lift_pid.compute(pos), -127.0, 127.0));
 
+      bool settled = false;
       if (std::fabs(t - pos) < SETTLED_DEG) {
         if (!close_since) close_since = pros::millis();
-        if (pros::millis() - close_since >= SETTLED_MS) {
-          arm.brake();  // HOLD brake keeps it here
-          mode = HOLD;
-          active_target = NAN;
-        }
+        settled = pros::millis() - close_since >= SETTLED_MS;
       } else {
         close_since = 0;
+      }
+      bool stuck = pros::millis() - move_start > MOVE_TIMEOUT_MS;
+      if (settled || stuck) {
+        arm.brake();  // HOLD brake keeps it here
+        mode = HOLD;
+        active_target = NAN;
+        if (stuck) show("LIFT STUCK?");
       }
     } else {
       active_target = NAN;
@@ -120,17 +131,10 @@ void lift_task() {
   }
 }
 
-// Wait for the lift to get there. Returns false if the driver cancelled
+// Wait for the lift to get there (or give up). Returns false if the driver cancelled
 bool wait_for_lift() {
-  uint32_t start = pros::millis();
   while (mode == TARGET) {
     if (cancel) return false;
-    if (pros::millis() - start > MOVE_TIMEOUT_MS) {
-      arm.brake();
-      mode = HOLD;
-      show("LIFT STUCK?");
-      return true;
-    }
     pros::delay(ez::util::DELAY_TIME);
   }
   return !cancel;
@@ -173,7 +177,7 @@ void place() {
   // Raise -> release -> back up -> lower. Stops wherever the driver takes over
   go_to(heights[h]);
   if (wait_for_lift()) {
-    release_piece();
+    claw::release();
     if (!cancel) {
       next = std::min(h + 1, HEIGHT_COUNT - 1);  // Placed it, so the next press goes one higher
       if (back_up() && !cancel) go_to(0);
@@ -271,8 +275,17 @@ void opcontrol() {
 
   if (master.get_digital_new_press(DIGITAL_R2)) {
     stop_macro();
-    go_to(0);
-    show("LIFT DOWN");
+    if (master.get_digital(DIGITAL_A)) {
+      // The lift is sitting at the bottom: count this as 0 again (fixes saved heights if the
+      // program was started with the lift up)
+      mode = HOLD;
+      arm.brake();
+      arm.tare_position_all();
+      show("BOTTOM RESET");
+    } else {
+      go_to(0);
+      show("LIFT DOWN");
+    }
   }
 
   if (master.get_digital_new_press(DIGITAL_UP)) pick_next(next + 1);
@@ -290,8 +303,7 @@ void move_to_height(int height) {
 }
 
 void wait() {
-  uint32_t start = pros::millis();
-  while (mode == TARGET && pros::millis() - start < MOVE_TIMEOUT_MS) pros::delay(ez::util::DELAY_TIME);
+  while (mode == TARGET) pros::delay(ez::util::DELAY_TIME);  // lift_task gives up after MOVE_TIMEOUT_MS
 }
 
 std::string status_text() {

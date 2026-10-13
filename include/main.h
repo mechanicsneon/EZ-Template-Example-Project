@@ -48,6 +48,7 @@
 #include "subsystems.hpp"
 #include "hud.hpp"
 #include "lift.hpp"
+#include "claw.hpp"
 
 
 /**

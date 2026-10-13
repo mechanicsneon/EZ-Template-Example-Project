@@ -218,12 +218,11 @@ void controller_task() {
       if (sec == 15) rumble = "- -";
       if (sec == 5) rumble = "...";
     }
-    std::set<std::string> now;
+    // Each problem rumbles once per match period, even if it flickers (like a motor right at 55C)
+    if (s.mode != last_mode) seen_warnings.clear();
     for (auto &w : s.warnings) {
-      now.insert(w.key);
-      if (!seen_warnings.count(w.key) && s.mode == DRIVER && rumble.empty()) rumble = ".";
+      if (seen_warnings.insert(w.key).second && s.mode == DRIVER && rumble.empty()) rumble = ".";
     }
-    seen_warnings = now;
     last_mode = s.mode;
     last_sec = sec;
 
@@ -433,6 +432,16 @@ void update_hud(const Status &s) {
 
 // Runs inside LVGL's own task, so it's safe to touch the screen here
 void brain_tick(lv_timer_t *) {
+  // Build everything on the first tick, inside LVGL's task (LVGL isn't thread safe)
+  if (!hud_screen) {
+    // EZ-Template's auton selector is on the active screen, keep it so we can switch back
+    selector_screen = lv_scr_act();
+    lv_obj_t *back = button(selector_screen, "HUD", [](lv_event_t *) { screen_choice = SHOW_HUD; });
+    lv_obj_set_size(back, 72, 34);
+    lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -6, 6);
+    build_hud_screen();
+  }
+
   static int last_mode = -1;
   Status s = read_status();
 
@@ -464,15 +473,8 @@ void driver_timer_start() {
 }
 
 void initialize() {
-  // EZ-Template's auton selector is on the active screen, keep it so we can switch back
-  selector_screen = lv_scr_act();
-  lv_obj_t *back = button(selector_screen, "HUD", [](lv_event_t *) { screen_choice = SHOW_HUD; });
-  lv_obj_set_size(back, 72, 34);
-  lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -6, 6);
-
-  build_hud_screen();
   track_mode();
-  lv_timer_create(brain_tick, 100, nullptr);
+  lv_timer_create(brain_tick, 100, nullptr);  // Builds and updates the brain screen
 
   pros::Task controller(controller_task, "HUD controller");
 }

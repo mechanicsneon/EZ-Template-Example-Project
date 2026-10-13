@@ -62,21 +62,19 @@ void initialize() {
   // chassis.opcontrol_curve_buttons_right_set(pros::E_CONTROLLER_DIGITAL_Y, pros::E_CONTROLLER_DIGITAL_A);
 
   // Autonomous Selector using LLEMU
+  // The first line of each name shows on the HUD, so keep it short
   ez::as::auton_selector.autons_add({
-      {"Drive\n\nDrive forward and come back", drive_example},
-      {"Turn\n\nTurn 3 times.", turn_example},
-      {"Drive and Turn\n\nDrive forward, turn, come back", drive_and_turn},
-      {"Drive and Turn\n\nSlow down during drive", wait_until_change_speed},
-      {"Swing Turn\n\nSwing in an 'S' curve", swing_example},
-      {"Motion Chaining\n\nDrive forward, turn, and come back, but blend everything together :D", motion_chaining},
-      {"Combine all 3 movements", combining_movements},
-      {"Interference\n\nAfter driving forward, robot performs differently if interfered or not", interfered_example},
-      {"Simple Odom\n\nThis is the same as the drive example, but it uses odom instead!", odom_drive_example},
-      {"Pure Pursuit\n\nGo to (0, 30) and pass through (6, 10) on the way.  Come back to (0, 0)", odom_pure_pursuit_example},
-      {"Pure Pursuit Wait Until\n\nGo to (24, 24) but start running an intake once the robot passes (12, 24)", odom_pure_pursuit_wait_until_example},
-      {"Boomerang\n\nGo to (0, 24, 45) then come back to (0, 0, 0)", odom_boomerang_example},
-      {"Boomerang Pure Pursuit\n\nGo to (0, 24, 45) on the way to (24, 24) then come back to (0, 0, 0)", odom_boomerang_injected_pure_pursuit_example},
-      {"Measure Offsets\n\nThis will turn the robot a bunch of times and calculate your offsets for your tracking wheels.", measure_offsets},
+      {"Red Left\n\nMatch: middle of the left wall. Left Toggle red, Preload into the left red Goal", red_left_toggle},
+      {"Red Bottom\n\nMatch: middle of the bottom wall. Bottom Toggle red, Preload into the bottom red Goal", red_bottom_toggle},
+      {"Red Left 2\n\nMatch: middle of the left wall. Left Toggle red, Preload + Midfield Pin into both red Goals", red_left_two_goals},
+      {"Blue Right\n\nMatch: middle of the right wall. Right Toggle blue, Preload into the right blue Goal", blue_right_toggle},
+      {"Blue Top\n\nMatch: middle of the top wall. Top Toggle blue, Preload into the top blue Goal", blue_top_toggle},
+      {"Blue Right 2\n\nMatch: middle of the right wall. Right Toggle blue, Preload + Midfield Pin into both blue Goals", blue_right_two_goals},
+      {"Skills Quick\n\nSkills: left Toggle, 3 Pins, park in the Midfield (33 pts)", skills_quick},
+      {"Skills Toggles\n\nSkills: both Toggles, yellow Pins in all 5 red-side Goals, park (58 pts)", skills_toggles},
+      {"Test Drive\n\nPID test: drive forward and come back", drive_example},
+      {"Test Turn\n\nPID test: turn 3 times", turn_example},
+      {"Test Swing\n\nPID test: swing in an 'S' curve", swing_example},
   });
 
   // Initialize chassis and auton selector
@@ -217,7 +215,8 @@ void ez_template_extras() {
       chassis.pid_tuner_toggle();
 
     // Trigger the selected autonomous routine
-    if (master.get_digital(DIGITAL_B) && master.get_digital(DIGITAL_DOWN)) {
+    // (new press, so holding the buttons doesn't start it again as soon as it finishes)
+    if (master.get_digital(DIGITAL_B) && master.get_digital_new_press(DIGITAL_DOWN)) {
       pros::motor_brake_mode_e_t preference = chassis.drive_brake_get();
       autonomous();
       chassis.drive_brake_set(preference);
@@ -267,7 +266,7 @@ void opcontrol() {
     // . . .
     // Put more user control code here!
     // . . .
-    // DR4B lift: L1/L2 manual, R1 place, A+R1 save height, R2 down, UP/DOWN/Y pick height
+    // DR4B lift: L1/L2 manual, R1 place, A+R1 save height, R2 down, A+R2 reset bottom, UP/DOWN/Y pick height
     lift::opcontrol();
 
     pros::delay(ez::util::DELAY_TIME);  // This is used for timer calculations!  Keep this ez::util::DELAY_TIME

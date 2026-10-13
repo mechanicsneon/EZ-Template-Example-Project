@@ -9,13 +9,18 @@
 //   R1         PLACE: lift to the next height, release, back up, lower. Next press goes one height higher
 //   A + R1     TEACH: save where the lift is right now as the next height (stored on the SD card)
 //   R2         cancel + lower the lift to the bottom
+//   A + R2     the lift is at the bottom right now: reset it to 0
 //   UP / DOWN  change which height is next
 //   Y          go back to height 1
 //
-// The lift counts 0 as wherever it is when the program starts, so start with it all the way down.
+// The lift counts 0 as wherever it is when the program starts, so start with it all the way down
+// (or lower it by hand and press A + R2).
 namespace lift {
 
-constexpr int HEIGHT_COUNT = 3;  // How many heights the place button cycles through
+// Saved heights match the three Goal heights in Override (autons use these too):
+//   H1 = Alliance Goal (3.25" tall), H2 = neutral Goal (5.8"), H3 = center Goal (8.8")
+// so save H1 at the right height for a red Goal, H2 for a black Quadrant Goal, H3 for the center
+constexpr int HEIGHT_COUNT = 3;
 
 void initialize();  // Call in initialize()
 void opcontrol();   // Call every loop in opcontrol()

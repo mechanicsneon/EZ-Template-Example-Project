@@ -1,3 +1,5 @@
+#include <cmath>
+
 #include "main.h"
 
 /////
@@ -51,15 +53,11 @@ void default_constants() {
   chassis.pid_angle_behavior_set(ez::shortest);  // Changes the default behavior for turning, this defaults it to the shortest path there
 }
 
-///
-// Drive Example
-///
-void drive_example() {
-  // The first parameter is target inches
-  // The second parameter is max speed the robot will drive at
-  // The third parameter is a boolean (true or false) for enabling/disabling a slew at the start of drive motions
-  // for slew, only enable it when the drive distance is greater than the slew distance + a few inches
+/////
+// PID tests: simple moves for checking the PID gains on the real robot
+/////
 
+void drive_example() {
   chassis.pid_drive_set(24_in, DRIVE_SPEED, true);
   chassis.pid_wait();
 
@@ -70,13 +68,7 @@ void drive_example() {
   chassis.pid_wait();
 }
 
-///
-// Turn Example
-///
 void turn_example() {
-  // The first parameter is the target in degrees
-  // The second parameter is max speed the robot will drive at
-
   chassis.pid_turn_set(90_deg, TURN_SPEED);
   chassis.pid_wait();
 
@@ -87,63 +79,7 @@ void turn_example() {
   chassis.pid_wait();
 }
 
-///
-// Combining Turn + Drive
-///
-void drive_and_turn() {
-  chassis.pid_drive_set(24_in, DRIVE_SPEED, true);
-  chassis.pid_wait();
-
-  chassis.pid_turn_set(45_deg, TURN_SPEED);
-  chassis.pid_wait();
-
-  chassis.pid_turn_set(-45_deg, TURN_SPEED);
-  chassis.pid_wait();
-
-  chassis.pid_turn_set(0_deg, TURN_SPEED);
-  chassis.pid_wait();
-
-  chassis.pid_drive_set(-24_in, DRIVE_SPEED, true);
-  chassis.pid_wait();
-}
-
-///
-// Wait Until and Changing Max Speed
-///
-void wait_until_change_speed() {
-  // pid_wait_until will wait until the robot gets to a desired position
-
-  // When the robot gets to 6 inches slowly, the robot will travel the remaining distance at full speed
-  chassis.pid_drive_set(24_in, 30, true);
-  chassis.pid_wait_until(6_in);
-  chassis.pid_speed_max_set(DRIVE_SPEED);  // After driving 6 inches at 30 speed, the robot will go the remaining distance at DRIVE_SPEED
-  chassis.pid_wait();
-
-  chassis.pid_turn_set(45_deg, TURN_SPEED);
-  chassis.pid_wait();
-
-  chassis.pid_turn_set(-45_deg, TURN_SPEED);
-  chassis.pid_wait();
-
-  chassis.pid_turn_set(0_deg, TURN_SPEED);
-  chassis.pid_wait();
-
-  // When the robot gets to -6 inches slowly, the robot will travel the remaining distance at full speed
-  chassis.pid_drive_set(-24_in, 30, true);
-  chassis.pid_wait_until(-6_in);
-  chassis.pid_speed_max_set(DRIVE_SPEED);  // After driving 6 inches at 30 speed, the robot will go the remaining distance at DRIVE_SPEED
-  chassis.pid_wait();
-}
-
-///
-// Swing Example
-///
 void swing_example() {
-  // The first parameter is ez::LEFT_SWING or ez::RIGHT_SWING
-  // The second parameter is the target in degrees
-  // The third parameter is the speed of the moving side of the drive
-  // The fourth parameter is the speed of the still side of the drive, this allows for wider arcs
-
   chassis.pid_swing_set(ez::LEFT_SWING, 45_deg, SWING_SPEED, 45);
   chassis.pid_wait();
 
@@ -157,225 +93,313 @@ void swing_example() {
   chassis.pid_wait();
 }
 
-///
-// Motion Chaining
-///
-void motion_chaining() {
-  // Motion chaining is where motions all try to blend together instead of individual movements.
-  // This works by exiting while the robot is still moving a little bit.
-  // To use this, replace pid_wait with pid_wait_quick_chain.
-  chassis.pid_drive_set(24_in, DRIVE_SPEED, true);
-  chassis.pid_wait();
+/////
+// V5RC Override field map (Game Manual v2.1, Appendix A), in inches
+//
+// (0, 0) is the center of the field. The red Alliance Station is on the left (x = -70.2) and
+// the audience is at the bottom. Headings: 0 = facing +y (away from the audience), 90 = facing +x.
+// Red's side of the Autonomous Line (the double diagonal from the top-left corner to the
+// bottom-right corner) is the left and bottom Quadrants. Blue's side is red's turned 180
+// degrees, so blue routes run the red route with every point turned 180 degrees.
+//
+// Every route below was checked against the v2.1 rules: legal start (SG1), never past the
+// Autonomous Line (SG7), never touching blue or neutral Goals (SG9/SG10), nothing hit, and
+// match routes end off the wall (Autonomous Win Point). The waypoints thread between field
+// objects with very little room, so re-check the whole path if you change one.
+/////
 
-  chassis.pid_turn_set(45_deg, TURN_SPEED);
-  chassis.pid_wait_quick_chain();
+namespace {
 
-  chassis.pid_turn_set(-45_deg, TURN_SPEED);
-  chassis.pid_wait_quick_chain();
+struct Pt {
+  double x, y;
+};
+struct Pose {
+  Pt p;
+  double heading;
+};
 
-  chassis.pid_turn_set(0_deg, TURN_SPEED);
-  chassis.pid_wait();
+// Goals and the lift level to place at: 1 = Alliance Goal (3.25"), 2 = neutral (5.8"), 3 = center (8.8")
+struct Goal {
+  Pt p;
+  int height;
+};
+const Goal GOAL_RED_LEFT = {{-47.1, -23.55}, 1};
+const Goal GOAL_RED_BOTTOM = {{-23.55, -47.1}, 1};
+const Goal GOAL_NEUTRAL_LEFT = {{-47.1, 23.55}, 2};  // Skills only: in matches it starts with a Pin in it
+const Goal GOAL_CENTER = {{0, 0}, 3};                // Skills only: in matches it starts with a Pin in it
 
-  // Your final motion should still be a normal pid_wait
-  chassis.pid_drive_set(-24_in, DRIVE_SPEED, true);
+// Upright Pins sitting on a Cup. We take the Pin; the Cup stays
+const Pt MID_WEST = {-23.55, 0};             // Red half up. On the Autonomous Line, so either alliance can take it
+const Pt MID_SOUTH = {0, -23.55};            // Red half up. On the Autonomous Line
+const Pt STACK_RED_INNER = {-23.55, -23.55};  // Yellow/yellow, on our side
+
+// The rest of the field, for adding new routes. Blue side: skills only
+const Goal GOAL_NEUTRAL_BOTTOM = {{23.55, -47.1}, 2};
+[[maybe_unused]] const Goal GOAL_BLUE_TOP = {{23.55, 47.1}, 1};
+[[maybe_unused]] const Goal GOAL_BLUE_RIGHT = {{47.1, 23.55}, 1};
+[[maybe_unused]] const Goal GOAL_NEUTRAL_TOP = {{-23.55, 47.1}, 2};
+[[maybe_unused]] const Goal GOAL_NEUTRAL_RIGHT = {{47.1, -23.55}, 2};
+[[maybe_unused]] const Pt MID_NORTH = {0, 23.55};  // Blue half up
+[[maybe_unused]] const Pt MID_EAST = {23.55, 0};   // Blue half up
+const Pt STACK_RED_OUTER = {-47.1, -47.1};
+[[maybe_unused]] const Pt STACK_BLUE_INNER = {23.55, 23.55};
+[[maybe_unused]] const Pt STACK_BLUE_OUTER = {47.1, 47.1};
+[[maybe_unused]] const Pt LOADER_RED_BOTTOM = {-66.5, -58.8};  // Skills: Match Loads come out the bottom
+[[maybe_unused]] const Pt LOADER_RED_TOP = {-66.5, 58.8};
+constexpr int LOADER_WAIT_MS = 400;  // Time for the Match Load to be dropped in
+
+// Yellow/yellow Pins on the middle Cup of each wall group, either side of the Toggle
+const Pt WALL_BOTTOM_LEFT = {-23.55, -68.6};
+const Pt WALL_BOTTOM_RIGHT = {23.55, -68.6};
+[[maybe_unused]] const Pt WALL_LEFT_LOW = {-68.6, -23.55};
+[[maybe_unused]] const Pt WALL_LEFT_HIGH = {-68.6, 23.55};
+
+// Toggles. Our robot sets one by backing the hook on its back into the wall from `spot`.
+// Each bump turns the Toggle one color. A set Toggle makes every visible yellow Pin half in
+// its Quadrant count for us (10 each), including the yellow Pin already in the neutral Goal
+struct ToggleSpot {
+  Pt spot;
+  double heading;  // Facing away from the wall
+};
+const ToggleSpot TOGGLE_LEFT = {{-55.2, 0}, 90};
+const ToggleSpot TOGGLE_BOTTOM = {{0, -55.2}, 0};
+constexpr int TOGGLE_BUMPS = 1;      // TODO: bumps to go yellow -> red (1 or 2, depends which way the hook turns it)
+constexpr int BUMP_POWER = 50;       // Out of 127. TODO: tune so it turns the Toggle without slamming
+constexpr int BUMP_MS = 450;         // Long enough to reach the wall and turn the Toggle
+constexpr double WALL_GAP = 61.2;    // Field center to robot center when its back is flat on a wall
+
+// Legal starts (SG1): against the wall, centered in front of the Toggle, between the wall Cups.
+// The two red robots must be in different Quadrants, so agree with your partner who takes which
+const Pose START_LEFT = {{-61.2, 0}, 90};
+const Pose START_BOTTOM = {{0, -61.2}, 0};
+
+// Robot center to the middle of the claw's grip. TODO: measure on the robot
+constexpr double CLAW_REACH = 13;
+// Lift level for taking a Pin off the top of a Cup (Cups are 6.5" tall). TODO: check on the robot
+constexpr int PICK_HEIGHT = 2;
+
+/////
+// Route helpers
+/////
+
+bool blue = false;  // Blue routes: every point turned 180 degrees about the center
+
+Pt side(Pt p) { return blue ? Pt{-p.x, -p.y} : p; }
+
+void start_at(Pose s) {
+  Pt p = side(s.p);
+  chassis.odom_enable(true);
+  chassis.odom_xyt_set(p.x, p.y, blue ? s.heading + 180 : s.heading);
+}
+
+void drive_forward(double inches) {
+  chassis.pid_drive_set(inches, DRIVE_SPEED);
   chassis.pid_wait();
 }
 
-///
-// Auto that tests everything
-///
-void combining_movements() {
-  chassis.pid_drive_set(24_in, DRIVE_SPEED, true);
-  chassis.pid_wait();
-
-  chassis.pid_turn_set(45_deg, TURN_SPEED);
-  chassis.pid_wait();
-
-  chassis.pid_swing_set(ez::RIGHT_SWING, -45_deg, SWING_SPEED, 45);
-  chassis.pid_wait();
-
-  chassis.pid_turn_set(0_deg, TURN_SPEED);
-  chassis.pid_wait();
-
-  chassis.pid_drive_set(-24_in, DRIVE_SPEED, true);
+void back(double inches) {
+  chassis.pid_drive_set(-inches, DRIVE_SPEED);
   chassis.pid_wait();
 }
 
-///
-// Interference example
-///
-void tug(int attempts) {
-  for (int i = 0; i < attempts - 1; i++) {
-    // Attempt to drive backward
-    printf("i - %i", i);
-    chassis.pid_drive_set(-12_in, 127);
-    chassis.pid_wait();
+// Face a field spot, then drive straight until the robot is `stop_short` inches from it
+void face_and_drive(Pt target, double stop_short) {
+  target = side(target);
+  chassis.pid_turn_set(ez::pose{target.x, target.y}, ez::fwd, TURN_SPEED);
+  chassis.pid_wait();
 
-    // If failsafed...
-    if (chassis.interfered) {
-      chassis.drive_sensor_reset();
-      chassis.pid_drive_set(-2_in, 20);
-      pros::delay(1000);
-    }
-    // If the robot successfully drove back, return
-    else {
-      return;
-    }
+  double dist = std::hypot(target.x - chassis.odom_x_get(), target.y - chassis.odom_y_get()) - stop_short;
+  if (dist < 0.5) return;
+  chassis.pid_drive_set(dist, DRIVE_SPEED, dist > 12);
+  chassis.pid_wait();
+}
+
+void drive_to(Pt spot) { face_and_drive(spot, 0); }
+
+// Place the Pin in the claw on a Goal, then back straight off
+void place(Goal goal, double back_off) {
+  lift::move_to_height(goal.height);  // Rises while the robot drives
+  face_and_drive(goal.p, CLAW_REACH);
+  lift::wait();
+  claw::release();
+  back(back_off);
+  lift::move_to_height(0);
+}
+
+// Take the Pin off the top of a Cup, then back straight off
+void pick(Pt spot, double back_off) {
+  lift::move_to_height(PICK_HEIGHT);
+  face_and_drive(spot, CLAW_REACH);
+  lift::wait();
+  claw::grab();
+  back(back_off);
+}
+
+// Set a Toggle: drive to the spot in front of it, turn the back to the wall, and bump the hook
+// into it once per color step. Flat against the wall we know exactly where the robot is, so
+// odometry gets corrected there too. Then pull away: a Toggle only counts when nothing touches it
+void set_toggle(ToggleSpot t) {
+  drive_to(t.spot);
+  double heading = blue ? t.heading + 180 : t.heading;
+  chassis.pid_turn_set(heading, TURN_SPEED);
+  chassis.pid_wait();
+
+  double to_wall = WALL_GAP - std::max(std::fabs(t.spot.x), std::fabs(t.spot.y));
+  for (int i = 0; i < TOGGLE_BUMPS; i++) {
+    chassis.drive_set(-BUMP_POWER, -BUMP_POWER);
+    pros::delay(BUMP_MS);
+    chassis.drive_set(0, 0);
+
+    Pt here = side({chassis.odom_x_get(), chassis.odom_y_get()});  // Into the red-side frame
+    if (t.spot.x != 0)
+      here.x = t.spot.x < 0 ? -WALL_GAP : WALL_GAP;
+    else
+      here.y = t.spot.y < 0 ? -WALL_GAP : WALL_GAP;
+    Pt field = side(here);
+    chassis.odom_xyt_set(field.x, field.y, heading);
+
+    drive_forward(to_wall);
   }
 }
 
-// If there is no interference, the robot will drive forward and turn 90 degrees.
-// If interfered, the robot will drive forward and then attempt to drive backward.
-void interfered_example() {
-  chassis.pid_drive_set(24_in, DRIVE_SPEED, true);
-  chassis.pid_wait();
-
-  if (chassis.interfered) {
-    tug(3);
-    return;
-  }
-
-  chassis.pid_turn_set(90_deg, TURN_SPEED);
-  chassis.pid_wait();
+// Skills only: take a Match Load from the bottom of a red Loader, then back straight off
+[[maybe_unused]] void load(Pt loader, double back_off) {
+  lift::move_to_height(0);  // TODO: the Loader opening may need a lift height
+  face_and_drive(loader, CLAW_REACH);
+  lift::wait();
+  pros::delay(LOADER_WAIT_MS);
+  claw::grab();
+  back(back_off);
 }
 
-///
-// Odom Drive PID
-///
-void odom_drive_example() {
-  // This works the same as pid_drive_set, but it uses odom instead!
-  // You can replace pid_drive_set with pid_odom_set and your robot will
-  // have better error correction.
+/////
+// Match autons (15 seconds). Each sets our Quadrant's Toggle to red first: that makes the yellow
+// Pin already sitting in that Quadrant's neutral Goal count for us (+10), and the Toggle bump
+// re-zeros odometry against the wall. Then they score the Preload in our own Alliance Goal.
+// Preload in the claw red half up = 5 (safe even if the Toggle gets flipped later), or yellow
+// half up = 10 while our Toggle stays red.
+// The Autonomous Win Point needs 6 scored Pin Halves in 2+ Goals from the whole alliance, which
+// takes stacking with Cups: plan it with your partner.
+/////
 
-  chassis.pid_odom_set(24_in, DRIVE_SPEED, true);
-  chassis.pid_wait();
-
-  chassis.pid_odom_set(-12_in, DRIVE_SPEED);
-  chassis.pid_wait();
-
-  chassis.pid_odom_set(-12_in, DRIVE_SPEED);
-  chassis.pid_wait();
+// Left wall start: left Toggle, Preload into the left red Goal. About 4 seconds, 15-20 points
+void left_toggle() {
+  start_at(START_LEFT);
+  drive_forward(4);
+  set_toggle(TOGGLE_LEFT);
+  drive_to({-52.6, -8.5});
+  place(GOAL_RED_LEFT, 4);
 }
 
-///
-// Odom Pure Pursuit
-///
-void odom_pure_pursuit_example() {
-  // Drive to 0, 30 and pass through 6, 10 and 0, 20 on the way, with slew
-  chassis.pid_odom_set({{{6_in, 10_in}, fwd, DRIVE_SPEED},
-                        {{0_in, 20_in}, fwd, DRIVE_SPEED},
-                        {{0_in, 30_in}, fwd, DRIVE_SPEED}},
-                       true);
-  chassis.pid_wait();
-
-  // Drive to 0, 0 backwards
-  chassis.pid_odom_set({{0_in, 0_in}, rev, DRIVE_SPEED},
-                       true);
-  chassis.pid_wait();
+// Bottom wall start: bottom Toggle, Preload into the bottom red Goal. About 4 seconds, 15-20 points
+void bottom_toggle() {
+  start_at(START_BOTTOM);
+  drive_forward(4);
+  set_toggle(TOGGLE_BOTTOM);
+  drive_to({-8.5, -52.6});
+  place(GOAL_RED_BOTTOM, 4);
 }
 
-///
-// Odom Pure Pursuit Wait Until
-///
-void odom_pure_pursuit_wait_until_example() {
-  chassis.pid_odom_set({{{0_in, 24_in}, fwd, DRIVE_SPEED},
-                        {{12_in, 24_in}, fwd, DRIVE_SPEED},
-                        {{24_in, 24_in}, fwd, DRIVE_SPEED}},
-                       true);
-  chassis.pid_wait_until_index(1);  // Waits until the robot passes 12, 24
-  // Intake.move(127);  // Set your intake to start moving once it passes through the second point in the index
-  chassis.pid_wait();
-  // Intake.move(0);  // Turn the intake off
+// Left wall start: left Toggle, Preload into the left red Goal, then the red-up Midfield Pin into
+// the bottom red Goal. Uses both red Goals, so your partner shouldn't. About 11 seconds, 20-25 points
+void left_two_goals() {
+  start_at(START_LEFT);
+  drive_forward(4);
+  set_toggle(TOGGLE_LEFT);
+  drive_to({-52.6, -8.5});
+  place(GOAL_RED_LEFT, 4);
+  drive_to({-38, -3.9});
+  pick(MID_WEST, 4);
+  drive_to({-36, -8});
+  drive_to({-33.8, -34.8});
+  place(GOAL_RED_BOTTOM, 4);
 }
 
-///
-// Odom Boomerang
-///
-void odom_boomerang_example() {
-  chassis.pid_odom_set({{0_in, 24_in, 45_deg}, fwd, DRIVE_SPEED},
-                       true);
-  chassis.pid_wait();
+}  // namespace
 
-  chassis.pid_odom_set({{0_in, 0_in, 0_deg}, rev, DRIVE_SPEED},
-                       true);
-  chassis.pid_wait();
+void red_left_toggle() {
+  blue = false;
+  left_toggle();
+}
+void red_bottom_toggle() {
+  blue = false;
+  bottom_toggle();
+}
+void red_left_two_goals() {
+  blue = false;
+  left_two_goals();
+}
+void blue_right_toggle() {
+  blue = true;
+  left_toggle();
+}
+void blue_top_toggle() {
+  blue = true;
+  bottom_toggle();
+}
+void blue_right_two_goals() {
+  blue = true;
+  left_two_goals();
 }
 
-///
-// Odom Boomerang Injected Pure Pursuit
-///
-void odom_boomerang_injected_pure_pursuit_example() {
-  chassis.pid_odom_set({{{0_in, 24_in, 45_deg}, fwd, DRIVE_SPEED},
-                        {{12_in, 24_in}, fwd, DRIVE_SPEED},
-                        {{24_in, 24_in}, fwd, DRIVE_SPEED}},
-                       true);
-  chassis.pid_wait();
+/////
+// Skills autons (60 seconds, RSC2-RSC4): always start in the left Quadrant next to the red
+// Alliance Station, and all Goals start empty. With our Toggles red, every yellow Pin half we
+// Place in a red Quadrant scores 10, and a yellow half in the center Goal scores 10 if we end in
+// the Midfield (8 more). Load the Preload yellow half up.
+// Times are estimates from the simulation; the real robot will be slower, so they leave room.
+/////
 
-  chassis.pid_odom_set({{0_in, 0_in, 0_deg}, rev, DRIVE_SPEED},
-                       true);
-  chassis.pid_wait();
+// Left Toggle, 3 Pins, park. 33 points, about 18 s
+void skills_quick() {
+  blue = false;
+  start_at(START_LEFT);
+  drive_forward(4);
+  set_toggle(TOGGLE_LEFT);
+  drive_to({-52.6, -8.5});
+  place(GOAL_RED_LEFT, 4);
+  drive_to({-34.2, -12.9});
+  pick(STACK_RED_INNER, 4);
+  drive_to({-41.6, 8.5});
+  place(GOAL_NEUTRAL_LEFT, 4);
+  drive_to({-37.1, 6.3});
+  pick(MID_WEST, 4);
+  drive_to({-34, -12});
+  drive_to({-12.3, -10.3});
+  place(GOAL_CENTER, 4);
+  drive_to({-13, -8});  // Park in the Midfield
 }
 
-///
-// Calculate the offsets of your tracking wheels
-///
-void measure_offsets() {
-  // Number of times to test
-  int iterations = 10;
-
-  // Our final offsets
-  double l_offset = 0.0, r_offset = 0.0, b_offset = 0.0, f_offset = 0.0;
-
-  // Reset all trackers if they exist
-  if (chassis.odom_tracker_left != nullptr) chassis.odom_tracker_left->reset();
-  if (chassis.odom_tracker_right != nullptr) chassis.odom_tracker_right->reset();
-  if (chassis.odom_tracker_back != nullptr) chassis.odom_tracker_back->reset();
-  if (chassis.odom_tracker_front != nullptr) chassis.odom_tracker_front->reset();
-  
-  for (int i = 0; i < iterations; i++) {
-    // Reset pid targets and get ready for running an auton
-    chassis.pid_targets_reset();
-    chassis.drive_imu_reset();
-    chassis.drive_sensor_reset();
-    chassis.drive_brake_set(MOTOR_BRAKE_HOLD);
-    chassis.odom_xyt_set(0_in, 0_in, 0_deg);
-    double imu_start = chassis.odom_theta_get();
-    double target = i % 2 == 0 ? 90 : 270;  // Switch the turn target every run from 270 to 90
-
-    // Turn to target at half power
-    chassis.pid_turn_set(target, 63, ez::raw);
-    chassis.pid_wait();
-    pros::delay(250);
-
-    // Calculate delta in angle
-    double t_delta = util::to_rad(fabs(util::wrap_angle(chassis.odom_theta_get() - imu_start)));
-
-    // Calculate delta in sensor values that exist
-    double l_delta = chassis.odom_tracker_left != nullptr ? chassis.odom_tracker_left->get() : 0.0;
-    double r_delta = chassis.odom_tracker_right != nullptr ? chassis.odom_tracker_right->get() : 0.0;
-    double b_delta = chassis.odom_tracker_back != nullptr ? chassis.odom_tracker_back->get() : 0.0;
-    double f_delta = chassis.odom_tracker_front != nullptr ? chassis.odom_tracker_front->get() : 0.0;
-
-    // Calculate the radius that the robot traveled
-    l_offset += l_delta / t_delta;
-    r_offset += r_delta / t_delta;
-    b_offset += b_delta / t_delta;
-    f_offset += f_delta / t_delta;
-  }
-
-  // Average all offsets
-  l_offset /= iterations;
-  r_offset /= iterations;
-  b_offset /= iterations;
-  f_offset /= iterations;
-
-  // Set new offsets to trackers that exist
-  if (chassis.odom_tracker_left != nullptr) chassis.odom_tracker_left->distance_to_center_set(l_offset);
-  if (chassis.odom_tracker_right != nullptr) chassis.odom_tracker_right->distance_to_center_set(r_offset);
-  if (chassis.odom_tracker_back != nullptr) chassis.odom_tracker_back->distance_to_center_set(b_offset);
-  if (chassis.odom_tracker_front != nullptr) chassis.odom_tracker_front->distance_to_center_set(f_offset);
+// Both red Toggles, yellow Pins in all 5 red-side Goals, park. 58 points, about 40 s
+void skills_toggles() {
+  blue = false;
+  start_at(START_LEFT);
+  drive_forward(4);
+  set_toggle(TOGGLE_LEFT);
+  drive_to({-52.6, -8.5});
+  place(GOAL_RED_LEFT, 4);
+  drive_to({-34.2, -12.9});
+  pick(STACK_RED_INNER, 4);
+  drive_to({-41.6, 8.5});
+  place(GOAL_NEUTRAL_LEFT, 4);
+  drive_to({-34, -10});
+  drive_to({-14, -12});
+  drive_to({-8, -36});
+  set_toggle(TOGGLE_BOTTOM);
+  drive_to({-10.5, -57.7});
+  pick(WALL_BOTTOM_LEFT, 4);
+  drive_to({-10.4, -56.3});
+  place(GOAL_RED_BOTTOM, 4);
+  drive_to({10.5, -57.7});
+  pick(WALL_BOTTOM_RIGHT, 4);
+  drive_to({10.4, -56.3});
+  place(GOAL_NEUTRAL_BOTTOM, 4);
+  drive_to({-8, -36});
+  drive_to({-34, -34});
+  drive_to({-36.5, -36.5});
+  pick(STACK_RED_OUTER, 4);
+  drive_to({-34, -12});
+  drive_to({-12.3, -10.3});
+  place(GOAL_CENTER, 4);
+  drive_to({-13, -8});  // Park in the Midfield
 }
-
-// . . .
-// Make your own autonomous functions here!
-// . . .
