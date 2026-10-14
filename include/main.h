@@ -49,6 +49,7 @@
 #include "hud.hpp"
 #include "lift.hpp"
 #include "claw.hpp"
+#include "robot_config.hpp"
 
 
 /**

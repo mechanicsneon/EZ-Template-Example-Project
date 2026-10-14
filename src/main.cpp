@@ -54,6 +54,7 @@ void initialize() {
 
   // DR4B lift: saved heights + place macro (see lift.cpp). Start with the lift all the way down!
   lift::initialize();
+  claw::initialize();  // Claw type and ports: include/robot_config.hpp
 
   // These are already defaulted to these buttons, but you can change the left/right curve buttons here!
   // chassis.opcontrol_curve_buttons_left_set(pros::E_CONTROLLER_DIGITAL_LEFT, pros::E_CONTROLLER_DIGITAL_RIGHT);  // If using tank, only the left side is used.
@@ -68,6 +69,10 @@ void initialize() {
       {"Blue Right\n\nMatch: middle of the right wall. Right Toggle blue, Preload into the right blue Goal", blue_right_toggle},
       {"Blue Top\n\nMatch: middle of the top wall. Top Toggle blue, Preload into the top blue Goal", blue_top_toggle},
       {"Blue Right 2\n\nMatch: middle of the right wall. Right Toggle blue, Preload + Midfield Pin into both blue Goals", blue_right_two_goals},
+      {"Red L Toggle\n\nBACKUP, no claw needed. Middle of the left wall: left Toggle red, end off the wall (10 pts)", red_left_toggle_only},
+      {"Red B Toggle\n\nBACKUP, no claw needed. Middle of the bottom wall: bottom Toggle red, end off the wall (10 pts)", red_bottom_toggle_only},
+      {"Blue R Toggle\n\nBACKUP, no claw needed. Middle of the right wall: right Toggle blue, end off the wall (10 pts)", blue_right_toggle_only},
+      {"Blue T Toggle\n\nBACKUP, no claw needed. Middle of the top wall: top Toggle blue, end off the wall (10 pts)", blue_top_toggle_only},
       {"Skills Quick\n\nSkills: left Toggle, 3 Pins, park in the Midfield (33 pts)", skills_quick},
       {"Skills Toggles\n\nSkills: both Toggles, yellow Pins in all 5 red-side Goals, park (58 pts)", skills_toggles},
       {"Test Drive\n\nPID test: drive forward and come back", drive_example},
@@ -266,6 +271,9 @@ void opcontrol() {
     // . . .
     // DR4B lift: L1/L2 manual, R1 place, A+R1 save height, R2 down, A+R2 reset bottom, UP/DOWN/Y pick height
     lift::opcontrol();
+
+    // Claw: B grab / let go, LEFT tilt, RIGHT flip
+    claw::opcontrol();
 
     pros::delay(ez::util::DELAY_TIME);  // This is used for timer calculations!  Keep this ez::util::DELAY_TIME
   }

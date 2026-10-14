@@ -146,7 +146,6 @@ const Pt STACK_RED_OUTER = {-47.1, -47.1};
 [[maybe_unused]] const Pt STACK_BLUE_OUTER = {47.1, 47.1};
 [[maybe_unused]] const Pt LOADER_RED_BOTTOM = {-66.5, -58.8};  // Skills: Match Loads come out the bottom
 [[maybe_unused]] const Pt LOADER_RED_TOP = {-66.5, 58.8};
-constexpr int LOADER_WAIT_MS = 400;  // Time for the Match Load to be dropped in
 
 // Yellow/yellow Pins on the middle Cup of each wall group, either side of the Toggle
 const Pt WALL_BOTTOM_LEFT = {-23.55, -68.6};
@@ -163,9 +162,6 @@ struct ToggleSpot {
 };
 const ToggleSpot TOGGLE_LEFT = {{-55.2, 0}, 90};
 const ToggleSpot TOGGLE_BOTTOM = {{0, -55.2}, 0};
-constexpr int TOGGLE_BUMPS = 1;      // TODO: bumps to go yellow -> red (1 or 2, depends which way the hook turns it)
-constexpr int BUMP_POWER = 50;       // Out of 127. TODO: tune so it turns the Toggle without slamming
-constexpr int BUMP_MS = 450;         // Long enough to reach the wall and turn the Toggle
 constexpr double WALL_GAP = 61.2;    // Field center to robot center when its back is flat on a wall
 
 // Legal starts (SG1): against the wall, centered in front of the Toggle, between the wall Cups.
@@ -173,10 +169,13 @@ constexpr double WALL_GAP = 61.2;    // Field center to robot center when its ba
 const Pose START_LEFT = {{-61.2, 0}, 90};
 const Pose START_BOTTOM = {{0, -61.2}, 0};
 
-// Robot center to the middle of the claw's grip. TODO: measure on the robot
-constexpr double CLAW_REACH = 13;
-// Lift level for taking a Pin off the top of a Cup (Cups are 6.5" tall). TODO: check on the robot
-constexpr int PICK_HEIGHT = 2;
+// Claw reach, pick height, Toggle bumps etc. live in include/robot_config.hpp
+using cfg::BUMP_MS;
+using cfg::BUMP_POWER;
+using cfg::CLAW_REACH;
+using cfg::LOADER_WAIT_MS;
+using cfg::PICK_HEIGHT;
+using cfg::TOGGLE_BUMPS;
 
 /////
 // Route helpers
@@ -315,7 +314,38 @@ void left_two_goals() {
   place(GOAL_RED_BOTTOM, 4);
 }
 
+// BACKUPS, no claw needed: just set our Toggle and end off the wall. The yellow Pin already in
+// our Quadrant's neutral Goal then counts for us (10 points). About 2 seconds
+void left_toggle_only() {
+  start_at(START_LEFT);
+  drive_forward(4);
+  set_toggle(TOGGLE_LEFT);
+}
+
+void bottom_toggle_only() {
+  start_at(START_BOTTOM);
+  drive_forward(4);
+  set_toggle(TOGGLE_BOTTOM);
+}
+
 }  // namespace
+
+void red_left_toggle_only() {
+  blue = false;
+  left_toggle_only();
+}
+void red_bottom_toggle_only() {
+  blue = false;
+  bottom_toggle_only();
+}
+void blue_right_toggle_only() {
+  blue = true;
+  left_toggle_only();
+}
+void blue_top_toggle_only() {
+  blue = true;
+  bottom_toggle_only();
+}
 
 void red_left_toggle() {
   blue = false;

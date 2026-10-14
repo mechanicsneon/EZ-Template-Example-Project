@@ -15,6 +15,12 @@ void blue_right_toggle();
 void blue_top_toggle();
 void blue_right_two_goals();
 
+// Backups: Toggle only, no claw needed
+void red_left_toggle_only();
+void red_bottom_toggle_only();
+void blue_right_toggle_only();
+void blue_top_toggle_only();
+
 // Skills (60 seconds)
 void skills_quick();
 void skills_toggles();
