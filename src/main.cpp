@@ -8,10 +8,8 @@
 // Chassis constructor
 ez::Drive chassis(
     // These are your drive motors, the first motor is used for sensing!
-    // TODO: port 10 is listed on BOTH sides below. One motor can't be on both, so the
-    // drive fights itself. Check Brain -> Devices, then fix the side it's NOT on.
-    {-10, -20},    // Left Chassis Ports (negative port will reverse it!)
-    {1, 10},  // Right Chassis Ports (negative port will reverse it!)
+    {-11, -20},  // Left Chassis Ports: front 11, rear 20 (negative port will reverse it!)
+    {1, 10},     // Right Chassis Ports: front 1, rear 10 (negative port will reverse it!)
 
     17,      // IMU Port
     3.25,  // Wheel Diameter (Remember, 4" wheels without screw holes are actually 4.125!)
