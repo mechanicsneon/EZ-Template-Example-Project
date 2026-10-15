@@ -175,6 +175,7 @@ void place() {
   }
 
   // Raise -> release -> back up -> lower. Stops wherever the driver takes over
+  logger::event("place macro H" + std::to_string(h + 1));
   go_to(heights[h]);
   if (wait_for_lift()) {
     claw::release();
@@ -190,6 +191,7 @@ void place() {
 
 void stop_macro() {
   if (!macro_running) return;
+  logger::event("place macro cancelled");
   cancel = true;
   busy_drive = false;  // opcontrol drives again starting this loop
 }
@@ -290,7 +292,14 @@ void opcontrol() {
 
   if (master.get_digital_new_press(DIGITAL_UP)) pick_next(next + 1);
   if (master.get_digital_new_press(DIGITAL_DOWN) && !master.get_digital(DIGITAL_B)) pick_next(next - 1);  // B+DOWN runs auton
-  if (master.get_digital_new_press(DIGITAL_Y)) pick_next(0);
+  if (master.get_digital_new_press(DIGITAL_Y)) {
+    if (master.get_digital(DIGITAL_A)) {
+      move_to_height(cfg::PICK_HEIGHT);  // A+Y: the height for taking a Pin off a Cup
+      show("PICK HEIGHT");
+    } else {
+      pick_next(0);
+    }
+  }
 }
 
 bool drive_busy() { return busy_drive; }
@@ -321,6 +330,12 @@ bool status_is_new() {
 }
 
 int next_height() { return next + 1; }
+
+int heights_saved() {
+  int n = 0;
+  for (double h : heights) n += h > 0;
+  return n;
+}
 double position() { return read_position(); }
 
 }  // namespace lift

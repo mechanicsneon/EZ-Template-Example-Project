@@ -217,6 +217,7 @@ void drive_to(Pt spot) { face_and_drive(spot, 0); }
 
 // Place the Pin in the claw on a Goal, then back straight off
 void place(Goal goal, double back_off) {
+  logger::event("auton: place at (" + std::to_string((int)goal.p.x) + ", " + std::to_string((int)goal.p.y) + ")");
   lift::move_to_height(goal.height);  // Rises while the robot drives
   face_and_drive(goal.p, CLAW_REACH);
   lift::wait();
@@ -227,6 +228,7 @@ void place(Goal goal, double back_off) {
 
 // Take the Pin off the top of a Cup, then back straight off
 void pick(Pt spot, double back_off) {
+  logger::event("auton: pick at (" + std::to_string((int)spot.x) + ", " + std::to_string((int)spot.y) + ")");
   lift::move_to_height(PICK_HEIGHT);
   face_and_drive(spot, CLAW_REACH);
   lift::wait();
@@ -238,6 +240,7 @@ void pick(Pt spot, double back_off) {
 // into it once per color step. Flat against the wall we know exactly where the robot is, so
 // odometry gets corrected there too. Then pull away: a Toggle only counts when nothing touches it
 void set_toggle(ToggleSpot t) {
+  logger::event("auton: Toggle bump");
   drive_to(t.spot);
   double heading = blue ? t.heading + 180 : t.heading;
   chassis.pid_turn_set(heading, TURN_SPEED);
@@ -328,7 +331,32 @@ void bottom_toggle_only() {
   set_toggle(TOGGLE_BOTTOM);
 }
 
+// Bottom wall start: bottom Toggle, Preload into the bottom red Goal, then the red-up Pin from
+// the Midfield's south point into the left red Goal. Uses both red Goals, so your partner
+// shouldn't. About 11 seconds, 20-25 points
+void bottom_two_goals() {
+  start_at(START_BOTTOM);
+  drive_forward(4);
+  set_toggle(TOGGLE_BOTTOM);
+  drive_to({-8.5, -52.6});
+  place(GOAL_RED_BOTTOM, 4);
+  drive_to({-3.9, -38});
+  pick(MID_SOUTH, 4);
+  drive_to({-8, -36});
+  drive_to({-34.8, -33.8});
+  place(GOAL_RED_LEFT, 4);
+}
+
 }  // namespace
+
+void red_bottom_two_goals() {
+  blue = false;
+  bottom_two_goals();
+}
+void blue_top_two_goals() {
+  blue = true;
+  bottom_two_goals();
+}
 
 void red_left_toggle_only() {
   blue = false;

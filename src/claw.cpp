@@ -71,8 +71,14 @@ void initialize() {
 }
 
 void opcontrol() {
-  // B+DOWN runs the selected auton when not on a competition switch, so B alone only
-  if (master.get_digital_new_press(DIGITAL_B) && !master.get_digital(DIGITAL_DOWN)) set(!closed);
+  // B grabs / lets go. A+B is the Toggle bump assist. (B+DOWN runs the selected auton when not
+  // on a competition switch, so that combo is left alone)
+  if (master.get_digital_new_press(DIGITAL_B) && !master.get_digital(DIGITAL_DOWN)) {
+    if (master.get_digital(DIGITAL_A))
+      assist::bump_toggle();
+    else
+      set(!closed);
+  }
 
   if (chassis.pid_tuner_enabled()) return;  // The PID tuner uses the arrows
   if (cfg::TILT_PISTON_PORT && master.get_digital_new_press(DIGITAL_LEFT)) {

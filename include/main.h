@@ -50,6 +50,8 @@
 #include "lift.hpp"
 #include "claw.hpp"
 #include "robot_config.hpp"
+#include "assist.hpp"
+#include "logger.hpp"
 
 
 /**

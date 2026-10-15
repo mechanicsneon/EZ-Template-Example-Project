@@ -55,6 +55,7 @@ void initialize() {
   // DR4B lift: saved heights + place macro (see lift.cpp). Start with the lift all the way down!
   lift::initialize();
   claw::initialize();  // Claw type and ports: include/robot_config.hpp
+  logger::initialize();  // Match logs on the SD card
 
   // These are already defaulted to these buttons, but you can change the left/right curve buttons here!
   // chassis.opcontrol_curve_buttons_left_set(pros::E_CONTROLLER_DIGITAL_LEFT, pros::E_CONTROLLER_DIGITAL_RIGHT);  // If using tank, only the left side is used.
@@ -66,9 +67,11 @@ void initialize() {
       {"Red Left\n\nMatch: middle of the left wall. Left Toggle red, Preload into the left red Goal", red_left_toggle},
       {"Red Bottom\n\nMatch: middle of the bottom wall. Bottom Toggle red, Preload into the bottom red Goal", red_bottom_toggle},
       {"Red Left 2\n\nMatch: middle of the left wall. Left Toggle red, Preload + Midfield Pin into both red Goals", red_left_two_goals},
+      {"Red Bottom 2\n\nMatch: middle of the bottom wall. Bottom Toggle red, Preload + Midfield Pin into both red Goals", red_bottom_two_goals},
       {"Blue Right\n\nMatch: middle of the right wall. Right Toggle blue, Preload into the right blue Goal", blue_right_toggle},
       {"Blue Top\n\nMatch: middle of the top wall. Top Toggle blue, Preload into the top blue Goal", blue_top_toggle},
       {"Blue Right 2\n\nMatch: middle of the right wall. Right Toggle blue, Preload + Midfield Pin into both blue Goals", blue_right_two_goals},
+      {"Blue Top 2\n\nMatch: middle of the top wall. Top Toggle blue, Preload + Midfield Pin into both blue Goals", blue_top_two_goals},
       {"Red L Toggle\n\nBACKUP, no claw needed. Middle of the left wall: left Toggle red, end off the wall (10 pts)", red_left_toggle_only},
       {"Red B Toggle\n\nBACKUP, no claw needed. Middle of the bottom wall: bottom Toggle red, end off the wall (10 pts)", red_bottom_toggle_only},
       {"Blue R Toggle\n\nBACKUP, no claw needed. Middle of the right wall: right Toggle blue, end off the wall (10 pts)", blue_right_toggle_only},
@@ -142,6 +145,11 @@ void autonomous() {
   to be consistent
   */
 
+  auto &sel = ez::as::auton_selector;
+  if (!sel.Autons.empty()) {
+    const std::string &name = sel.Autons[sel.last_auton_page_current].Name;
+    logger::event("auton start: " + name.substr(0, name.find('\n')));
+  }
   ez::as::auton_selector.selected_auton_call();  // Calls selected auton from autonomous selector
 }
 
@@ -259,8 +267,8 @@ void opcontrol() {
     // Gives you some extras to make EZ-Template ezier
     ez_template_extras();
 
-    if (!lift::drive_busy())     // The place macro drives the robot back on its own
-      chassis.opcontrol_tank();  // Tank control
+    if (!lift::drive_busy() && !assist::drive_busy())  // Macros/assists drive the robot on their own
+      chassis.opcontrol_tank();                         // Tank control
     // chassis.opcontrol_arcade_standard(ez::SPLIT);   // Standard split arcade
     // chassis.opcontrol_arcade_standard(ez::SINGLE);  // Standard single arcade
     // chassis.opcontrol_arcade_flipped(ez::SPLIT);    // Flipped split arcade
@@ -272,8 +280,9 @@ void opcontrol() {
     // DR4B lift: L1/L2 manual, R1 place, A+R1 save height, R2 down, A+R2 reset bottom, UP/DOWN/Y pick height
     lift::opcontrol();
 
-    // Claw: B grab / let go, LEFT tilt, RIGHT flip
+    // Claw: B grab / let go, LEFT tilt, RIGHT flip. A+B = Toggle bump assist
     claw::opcontrol();
+    assist::opcontrol();
 
     pros::delay(ez::util::DELAY_TIME);  // This is used for timer calculations!  Keep this ez::util::DELAY_TIME
   }

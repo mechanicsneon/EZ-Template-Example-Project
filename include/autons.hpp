@@ -14,6 +14,8 @@ void red_left_two_goals();
 void blue_right_toggle();
 void blue_top_toggle();
 void blue_right_two_goals();
+void red_bottom_two_goals();
+void blue_top_two_goals();
 
 // Backups: Toggle only, no claw needed
 void red_left_toggle_only();

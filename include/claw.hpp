@@ -4,7 +4,7 @@
 // Set the claw type and ports in robot_config.hpp.
 //
 // Driver controls (see claw::opcontrol):
-//   B      grab / let go
+//   B      grab / let go          (A+B = Toggle bump, see assist.hpp)
 //   LEFT   tilt (if the robot has a tilt piston)
 //   RIGHT  flip (if the robot has a flip piston)
 namespace claw {

@@ -12,6 +12,7 @@
 //   A + R2     the lift is at the bottom right now: reset it to 0
 //   UP / DOWN  change which height is next
 //   Y          go back to height 1
+//   A + Y      lift to the height for taking a Pin off a Cup (PICK_HEIGHT in robot_config.hpp)
 //
 // The lift counts 0 as wherever it is when the program starts, so start with it all the way down
 // (or lower it by hand and press A + R2).
@@ -36,6 +37,7 @@ void wait();
 std::string status_text();
 bool status_is_new();  // True for a second or so after something changes, so the HUD shows it right away
 int next_height();     // 1..HEIGHT_COUNT
+int heights_saved();   // How many of the heights have been saved (0..HEIGHT_COUNT)
 double position();     // Motor degrees, 0 = bottom
 
 }  // namespace lift

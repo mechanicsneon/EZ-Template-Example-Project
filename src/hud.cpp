@@ -210,12 +210,12 @@ void controller_task() {
     track_mode();
     Status s = read_status();
 
-    // Rumbles in driver control: "-" at 0:30, "- -" at 0:15, "..." at 0:05, "." for each new problem
+    // Rumbles in driver control: "-" at 0:30, "- -" at 0:10 (Endgame), "..." at 0:05, "." for each new problem
     std::string rumble;
     int sec = (s.ms_left + 999) / 1000;
     if (s.mode == DRIVER && s.mode == last_mode && sec != last_sec) {
       if (sec == 30) rumble = "-";
-      if (sec == 15) rumble = "- -";
+      if (sec == 10) rumble = "- -";  // Endgame (SG12): head for the Midfield, check our Toggles
       if (sec == 5) rumble = "...";
     }
     // Each problem rumbles once per match period, even if it flickers (like a motor right at 55C)
@@ -256,11 +256,17 @@ const lv_color_t DARK_TEXT = lv_color_hex(0x0B0F17);
 constexpr int MAX_TILES = 8;
 
 // Which screen the driver picked with the touch buttons. Resets whenever the mode changes.
-enum ScreenChoice { AUTOMATIC, SHOW_HUD, SHOW_SELECTOR };
+// AUTOMATIC: the pre-match check while disabled, the HUD while enabled
+enum ScreenChoice { AUTOMATIC, SHOW_HUD, SHOW_SELECTOR, SHOW_CHECKS };
 std::atomic<int> screen_choice{AUTOMATIC};
 
 lv_obj_t *hud_screen = nullptr;
 lv_obj_t *selector_screen = nullptr;  // EZ-Template's auton selector (LLEMU)
+lv_obj_t *checks_screen = nullptr;    // Pre-match check
+
+constexpr int CHECK_COUNT = 8;
+lv_obj_t *check_status, *check_status_label, *check_auton, *check_start;
+lv_obj_t *check_dots[CHECK_COUNT], *check_labels[CHECK_COUNT];
 
 lv_obj_t *mode_pill, *mode_label, *timer_label, *subtitle, *warning_pill, *warning_label;
 lv_obj_t *battery_label, *battery_bar, *controller_label, *imu_label;
@@ -356,12 +362,109 @@ void build_hud_screen() {
   lv_obj_t *auton = box(hud_screen, 8, 180, 464, 52, PANEL);
   text(auton, 10, 6, &lv_font_montserrat_12, MUTED, "AUTON");
   auton_label = text(auton, 10, 22, &lv_font_montserrat_20, TEXT, "");
-  lv_obj_set_width(auton_label, 300);
+  lv_obj_set_width(auton_label, 200);
   lv_label_set_long_mode(auton_label, LV_LABEL_LONG_DOT);
   lift_label = text(auton, 120, 6, &lv_font_montserrat_12, CYAN, "");
   lv_obj_t *pick = button(auton, "PICK AUTON", [](lv_event_t *) { screen_choice = SHOW_SELECTOR; });
   lv_obj_set_size(pick, 130, 38);
   lv_obj_align(pick, LV_ALIGN_RIGHT_MID, -7, 0);
+  lv_obj_t *checks = button(auton, "CHECKS", [](lv_event_t *) { screen_choice = SHOW_CHECKS; });
+  lv_obj_set_size(checks, 96, 38);
+  lv_obj_align(checks, LV_ALIGN_RIGHT_MID, -145, 0);
+}
+
+/////
+// Pre-match check: what's selected, where it starts, and anything that would cost the match
+/////
+
+void build_checks_screen() {
+  checks_screen = lv_obj_create(nullptr);
+  lv_obj_set_style_bg_color(checks_screen, BG, 0);
+  lv_obj_clear_flag(checks_screen, LV_OBJ_FLAG_SCROLLABLE);
+
+  text(checks_screen, 10, 9, &lv_font_montserrat_20, CYAN, "PRE-MATCH");
+  check_status = box(checks_screen, 136, 8, 150, 26, OFF, 13);
+  check_status_label = text(check_status, 0, 0, &lv_font_montserrat_14, DARK_TEXT, "");
+  lv_obj_t *auton = button(checks_screen, "AUTON", [](lv_event_t *) { screen_choice = SHOW_SELECTOR; });
+  lv_obj_set_size(auton, 90, 32);
+  lv_obj_align(auton, LV_ALIGN_TOP_RIGHT, -84, 4);
+  lv_obj_t *hud = button(checks_screen, "HUD", [](lv_event_t *) { screen_choice = SHOW_HUD; });
+  lv_obj_set_size(hud, 70, 32);
+  lv_obj_align(hud, LV_ALIGN_TOP_RIGHT, -6, 4);
+
+  lv_obj_t *auton_box = box(checks_screen, 8, 42, 464, 66, PANEL);
+  check_auton = text(auton_box, 10, 6, &lv_font_montserrat_20, TEXT, "");
+  lv_obj_set_width(check_auton, 444);
+  lv_label_set_long_mode(check_auton, LV_LABEL_LONG_DOT);
+  check_start = text(auton_box, 10, 32, &lv_font_montserrat_12, MUTED, "");
+  lv_obj_set_width(check_start, 444);
+  lv_label_set_long_mode(check_start, LV_LABEL_LONG_WRAP);
+
+  lv_obj_t *list = box(checks_screen, 8, 114, 464, 118, PANEL);
+  for (int i = 0; i < CHECK_COUNT; i++) {
+    int x = i < 4 ? 10 : 238, y = 10 + (i % 4) * 26;
+    check_dots[i] = box(list, x, y + 3, 12, 12, OFF, 6);
+    check_labels[i] = text(list, x + 20, y, &lv_font_montserrat_14, TEXT, "");
+    lv_obj_set_width(check_labels[i], 200);
+    lv_label_set_long_mode(check_labels[i], LV_LABEL_LONG_DOT);
+  }
+}
+
+enum Level { OK, WARN, BAD };
+
+void update_checks(const Status &s) {
+  // Selected auton: its title + description (where it starts, what it does)
+  auto &selector = ez::as::auton_selector;
+  std::string title = "No auton", start = "";
+  if (!selector.Autons.empty()) {
+    int i = std::clamp(selector.last_auton_page_current, 0, (int)selector.Autons.size() - 1);
+    const std::string &name = selector.Autons[i].Name;
+    size_t br = name.find("\n\n");
+    title = name.substr(0, name.find('\n'));
+    if (br != std::string::npos) start = name.substr(br + 2);
+  }
+  lv_label_set_text(check_auton, title.c_str());
+  lv_label_set_text(check_start, start.c_str());
+
+  int unplugged = 0;
+  std::string first_unplugged;
+  for (auto &m : s.motors)
+    if (std::isnan(m.temp) && unplugged++ == 0) first_unplugged = m.name;
+  bool dup = std::any_of(s.warnings.begin(), s.warnings.end(), [](const Warning &w) { return w.key.rfind("dup", 0) == 0; });
+  int saved = lift::heights_saved();
+  bool sd = pros::usd::is_installed();
+  bool lift_down = lift::position() < 30;
+  bool imu_ready = s.imu_ok && chassis.drive_imu_calibrated();
+  bool field = pros::competition::is_connected();
+
+  const std::pair<Level, std::string> checks[CHECK_COUNT] = {
+      {imu_ready ? OK : BAD, !s.imu_ok ? "IMU unplugged" : imu_ready ? "IMU ready" : "IMU not ready: restart, hold still"},
+      {unplugged || dup ? BAD : OK,
+       dup ? "A port is used twice"
+           : unplugged ? "Unplugged: " + first_unplugged + (unplugged > 1 ? " +" + std::to_string(unplugged - 1) : "")
+                       : "All motors plugged in"},
+      {s.battery >= 60 ? OK : s.battery >= LOW_BATTERY ? WARN : BAD, "Battery " + std::to_string(s.battery) + "%"},
+      {cfg::CLAW_CONFIGURED ? OK : BAD, cfg::CLAW_CONFIGURED ? "Claw set up" : "Claw not set: robot_config.hpp"},
+      {saved == lift::HEIGHT_COUNT ? OK : WARN,
+       saved == lift::HEIGHT_COUNT ? "Lift heights saved" : std::to_string(saved) + "/3 lift heights saved (A+R1)"},
+      {sd ? OK : WARN, sd ? "SD card in (logs on)" : "No SD card: no logs/heights"},
+      {lift_down ? OK : WARN, lift_down ? "Lift down" : "Lift is up: lower it"},
+      {field ? OK : WARN, field ? "Field connected" : "Not on a field/switch"},
+  };
+
+  int bad = 0, warn = 0;
+  for (int i = 0; i < CHECK_COUNT; i++) {
+    lv_color_t c = checks[i].first == OK ? GOOD : checks[i].first == WARN ? WARM : HOT;
+    lv_obj_set_style_bg_color(check_dots[i], c, 0);
+    lv_label_set_text(check_labels[i], checks[i].second.c_str());
+    bad += checks[i].first == BAD;
+    warn += checks[i].first == WARN;
+  }
+  std::string status = bad ? std::to_string(bad) + (bad == 1 ? " PROBLEM" : " PROBLEMS") : warn ? "CHECK " + std::to_string(warn) : "READY";
+  lv_obj_set_style_bg_color(check_status, bad ? HOT : warn ? WARM : GOOD, 0);
+  lv_obj_set_style_text_color(check_status_label, bad ? TEXT : DARK_TEXT, 0);
+  lv_label_set_text(check_status_label, status.c_str());
+  lv_obj_center(check_status_label);
 }
 
 void layout_tiles(int count) {
@@ -436,10 +539,11 @@ void brain_tick(lv_timer_t *) {
   if (!hud_screen) {
     // EZ-Template's auton selector is on the active screen, keep it so we can switch back
     selector_screen = lv_scr_act();
-    lv_obj_t *back = button(selector_screen, "HUD", [](lv_event_t *) { screen_choice = SHOW_HUD; });
+    lv_obj_t *back = button(selector_screen, "BACK", [](lv_event_t *) { screen_choice = AUTOMATIC; });
     lv_obj_set_size(back, 72, 34);
     lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -6, 6);
     build_hud_screen();
+    build_checks_screen();
   }
 
   static int last_mode = -1;
@@ -450,19 +554,21 @@ void brain_tick(lv_timer_t *) {
     last_mode = s.mode;
   }
 
-  bool want_hud;
+  lv_obj_t *want;
   if (chassis.pid_tuner_enabled())
-    want_hud = false;  // The PID tuner draws on EZ-Template's screen
+    want = selector_screen;  // The PID tuner draws on EZ-Template's screen
   else if (screen_choice == SHOW_HUD)
-    want_hud = true;
+    want = hud_screen;
   else if (screen_choice == SHOW_SELECTOR)
-    want_hud = false;
+    want = selector_screen;
+  else if (screen_choice == SHOW_CHECKS)
+    want = checks_screen;
   else
-    want_hud = s.mode != DISABLED;  // Before the match, show the auton selector
+    want = s.mode == DISABLED ? checks_screen : hud_screen;  // Before the match: the pre-match check
 
-  lv_obj_t *want = want_hud ? hud_screen : selector_screen;
   if (lv_scr_act() != want) lv_scr_load(want);
-  if (want_hud) update_hud(s);
+  if (want == hud_screen) update_hud(s);
+  if (want == checks_screen) update_checks(s);
 }
 
 }  // namespace

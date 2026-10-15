@@ -20,6 +20,9 @@ enum class ClawType {
 };
 constexpr ClawType CLAW_TYPE = ClawType::PISTON;  // TODO: set to the real claw
 
+// Set to true once the claw type and ports below match the robot (the pre-match check shows red until then)
+constexpr bool CLAW_CONFIGURED = false;
+
 // MOTOR claw
 constexpr int CLAW_MOTOR_PORT = 2;  // TODO: smart port (negative reverses it, so + power closes)
 constexpr int CLAW_POWER = 100;     // Out of 127, while opening/closing
@@ -51,6 +54,11 @@ constexpr int PICK_HEIGHT = 2;  // TODO: check
 constexpr int TOGGLE_BUMPS = 1;  // TODO: 1 if one bump turns it yellow -> red, 2 if it goes to blue first
 constexpr int BUMP_POWER = 50;   // Out of 127. TODO: enough to turn it without slamming
 constexpr int BUMP_MS = 450;     // TODO: long enough to reach the wall and turn it
+
+// Driver control: A+B backs into the Toggle behind the robot once, then pulls away this long
+// (a Toggle only counts when no robot is touching it)
+constexpr int TOGGLE_PULL_POWER = 50;  // Out of 127
+constexpr int TOGGLE_PULL_MS = 300;
 
 // Skills: time for the drive team to drop a Match Load into the Loader
 constexpr int LOADER_WAIT_MS = 400;
