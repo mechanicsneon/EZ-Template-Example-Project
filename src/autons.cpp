@@ -186,6 +186,7 @@ bool blue = false;  // Blue routes: every point turned 180 degrees about the cen
 Pt side(Pt p) { return blue ? Pt{-p.x, -p.y} : p; }
 
 void start_at(Pose s) {
+  claw::grab();  // Grip the Preload: the claw starts open when the program starts
   Pt p = side(s.p);
   chassis.odom_enable(true);
   chassis.odom_xyt_set(p.x, p.y, blue ? s.heading + 180 : s.heading);
