@@ -34,6 +34,7 @@ void initialize() {
   ez::ez_template_print();
 
   pros::delay(500);  // Stop the user from doing anything while legacy ports configure
+  arm.set_brake_mode(pros::E_MOTOR_BRAKE_BRAKE);
 
   // Look at your horizontal tracking wheel and decide if it's in front of the midline of your robot or behind it
   //  - change `back` to `front` if the tracking wheel is in front of the midline
@@ -256,14 +257,15 @@ void opcontrol() {
     // . . .
     // Put more user control code here!
     // . . .
- if (master.get_digital(DIGITAL_L1)) {
-  arm.move(127);
-}
-else if (master.get_digital(DIGITAL_L2)) {
-  arm.move(-127);
-}
-else {
-  arm.move(0);}sorrso
+    if (master.get_digital(DIGITAL_L1)) {
+      arm.move(127);
+    }
+    else if (master.get_digital(DIGITAL_L2)) {
+      arm.move(-127);
+    }
+    else {
+      arm.move(0);
+    }
     pros::delay(ez::util::DELAY_TIME);  // This is used for timer calculations!  Keep this ez::util::DELAY_TIME
   }
 }
