@@ -8,8 +8,8 @@
 // Chassis constructor
 ez::Drive chassis(
     // These are your drive motors, the first motor is used for sensing!
-    {-10, -20},     // Left Chassis Ports (negative port will reverse it!)
-    {1, 10},  // Right Chassis Ports (negative port will reverse it!)
+    {-11, -20},  // Left Chassis Ports: front 11, rear 20 (negative port will reverse it!)
+    {1, 10},     // Right Chassis Ports: front 1, rear 10 (negative port will reverse it!)
 
     17,      // IMU Port
     3.25,  // Wheel Diameter (Remember, 4" wheels without screw holes are actually 4.125!)
@@ -46,39 +46,51 @@ void initialize() {
   // chassis.odom_tracker_left_set(&vert_tracker);
 
   // Configure your chassis controls
-  chassis.opcontrol_curve_buttons_toggle(true);   // Enables modifying the controller curve with buttons on the joysticks
+  chassis.opcontrol_curve_buttons_toggle(false);  // Off: the curve readout would take over the HUD's 3rd controller line
   chassis.opcontrol_drive_activebrake_set(0.0);   // Sets the active brake kP. We recommend ~2.  0 will disable.
   chassis.opcontrol_curve_default_set(0.0, 0.0);  // Defaults for curve. If using tank, only the first parameter is used. (Comment this line out if you have an SD card!)
 
   // Set the drive to your own constants from autons.cpp!
   default_constants();
 
+  // DR4B lift: saved heights + place macro (see lift.cpp). Start with the lift all the way down!
+  lift::initialize();
+  claw::initialize();  // Claw type and ports: include/robot_config.hpp
+  logger::initialize();  // Match logs on the SD card
+
   // These are already defaulted to these buttons, but you can change the left/right curve buttons here!
   // chassis.opcontrol_curve_buttons_left_set(pros::E_CONTROLLER_DIGITAL_LEFT, pros::E_CONTROLLER_DIGITAL_RIGHT);  // If using tank, only the left side is used.
   // chassis.opcontrol_curve_buttons_right_set(pros::E_CONTROLLER_DIGITAL_Y, pros::E_CONTROLLER_DIGITAL_A);
 
   // Autonomous Selector using LLEMU
+  // The first line of each name shows on the HUD, so keep it short
   ez::as::auton_selector.autons_add({
-      {"Drive\n\nDrive forward and come back", drive_example},
-      {"Turn\n\nTurn 3 times.", turn_example},
-      {"Drive and Turn\n\nDrive forward, turn, come back", drive_and_turn},
-      {"Drive and Turn\n\nSlow down during drive", wait_until_change_speed},
-      {"Swing Turn\n\nSwing in an 'S' curve", swing_example},
-      {"Motion Chaining\n\nDrive forward, turn, and come back, but blend everything together :D", motion_chaining},
-      {"Combine all 3 movements", combining_movements},
-      {"Interference\n\nAfter driving forward, robot performs differently if interfered or not", interfered_example},
-      {"Simple Odom\n\nThis is the same as the drive example, but it uses odom instead!", odom_drive_example},
-      {"Pure Pursuit\n\nGo to (0, 30) and pass through (6, 10) on the way.  Come back to (0, 0)", odom_pure_pursuit_example},
-      {"Pure Pursuit Wait Until\n\nGo to (24, 24) but start running an intake once the robot passes (12, 24)", odom_pure_pursuit_wait_until_example},
-      {"Boomerang\n\nGo to (0, 24, 45) then come back to (0, 0, 0)", odom_boomerang_example},
-      {"Boomerang Pure Pursuit\n\nGo to (0, 24, 45) on the way to (24, 24) then come back to (0, 0, 0)", odom_boomerang_injected_pure_pursuit_example},
-      {"Measure Offsets\n\nThis will turn the robot a bunch of times and calculate your offsets for your tracking wheels.", measure_offsets},
+      {"Red Left\n\nMatch: middle of the left wall. Left Toggle red, Preload into the left red Goal", red_left_toggle},
+      {"Red Bottom\n\nMatch: middle of the bottom wall. Bottom Toggle red, Preload into the bottom red Goal", red_bottom_toggle},
+      {"Red Left 2\n\nMatch: middle of the left wall. Left Toggle red, Preload + Midfield Pin into both red Goals", red_left_two_goals},
+      {"Red Bottom 2\n\nMatch: middle of the bottom wall. Bottom Toggle red, Preload + Midfield Pin into both red Goals", red_bottom_two_goals},
+      {"Blue Right\n\nMatch: middle of the right wall. Right Toggle blue, Preload into the right blue Goal", blue_right_toggle},
+      {"Blue Top\n\nMatch: middle of the top wall. Top Toggle blue, Preload into the top blue Goal", blue_top_toggle},
+      {"Blue Right 2\n\nMatch: middle of the right wall. Right Toggle blue, Preload + Midfield Pin into both blue Goals", blue_right_two_goals},
+      {"Blue Top 2\n\nMatch: middle of the top wall. Top Toggle blue, Preload + Midfield Pin into both blue Goals", blue_top_two_goals},
+      {"Red L Toggle\n\nBACKUP, no claw needed. Middle of the left wall: left Toggle red, end off the wall (10 pts)", red_left_toggle_only},
+      {"Red B Toggle\n\nBACKUP, no claw needed. Middle of the bottom wall: bottom Toggle red, end off the wall (10 pts)", red_bottom_toggle_only},
+      {"Blue R Toggle\n\nBACKUP, no claw needed. Middle of the right wall: right Toggle blue, end off the wall (10 pts)", blue_right_toggle_only},
+      {"Blue T Toggle\n\nBACKUP, no claw needed. Middle of the top wall: top Toggle blue, end off the wall (10 pts)", blue_top_toggle_only},
+      {"Skills Quick\n\nSkills: left Toggle, 3 Pins, park in the Midfield (33 pts)", skills_quick},
+      {"Skills Toggles\n\nSkills: both Toggles, yellow Pins in all 5 red-side Goals, park (58 pts)", skills_toggles},
+      {"Test Drive\n\nPID test: drive forward and come back", drive_example},
+      {"Test Turn\n\nPID test: turn 3 times", turn_example},
+      {"Test Swing\n\nPID test: swing in an 'S' curve", swing_example},
   });
 
   // Initialize chassis and auton selector
   chassis.initialize();
   ez::as::initialize();
   master.rumble(chassis.drive_imu_calibrated() ? "." : "---");
+
+  // Controller + brain HUD (see hud.cpp)
+  hud::initialize();
 }
 
 /**
@@ -134,6 +146,11 @@ void autonomous() {
   to be consistent
   */
 
+  auto &sel = ez::as::auton_selector;
+  if (!sel.Autons.empty()) {
+    const std::string &name = sel.Autons[sel.last_auton_page_current].Name;
+    logger::event("auton start: " + name.substr(0, name.find('\n')));
+  }
   ez::as::auton_selector.selected_auton_call();  // Calls selected auton from autonomous selector
 }
 
@@ -210,7 +227,8 @@ void ez_template_extras() {
       chassis.pid_tuner_toggle();
 
     // Trigger the selected autonomous routine
-    if (master.get_digital(DIGITAL_B) && master.get_digital(DIGITAL_DOWN)) {
+    // (new press, so holding the buttons doesn't start it again as soon as it finishes)
+    if (master.get_digital(DIGITAL_B) && master.get_digital_new_press(DIGITAL_DOWN)) {
       pros::motor_brake_mode_e_t preference = chassis.drive_brake_get();
       autonomous();
       chassis.drive_brake_set(preference);
@@ -241,6 +259,8 @@ void ez_template_extras() {
  * task, not resume it from where it left off.
  */
 void opcontrol() {
+  hud::driver_timer_start();  // Start the 1:45 countdown on the HUD
+
   // This is preference to what you like to drive on
   chassis.drive_brake_set(MOTOR_BRAKE_COAST);
 
@@ -248,7 +268,8 @@ void opcontrol() {
     // Gives you some extras to make EZ-Template ezier
     ez_template_extras();
 
-    chassis.opcontrol_tank();  // Tank control
+    if (!lift::drive_busy() && !assist::drive_busy())  // Macros/assists drive the robot on their own
+      chassis.opcontrol_tank();                         // Tank control
     // chassis.opcontrol_arcade_standard(ez::SPLIT);   // Standard split arcade
     // chassis.opcontrol_arcade_standard(ez::SINGLE);  // Standard single arcade
     // chassis.opcontrol_arcade_flipped(ez::SPLIT);    // Flipped split arcade

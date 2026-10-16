@@ -46,6 +46,12 @@
 // More includes here...
 #include "autons.hpp"
 #include "subsystems.hpp"
+#include "hud.hpp"
+#include "lift.hpp"
+#include "claw.hpp"
+#include "robot_config.hpp"
+#include "assist.hpp"
+#include "logger.hpp"
 
 
 /**
