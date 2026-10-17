@@ -68,7 +68,7 @@ constexpr double LIFT_SLOW_ZONE_DEG = 60;  // Lowering slows down over this many
 // into the field. Every match + both kinds of Skills get exactly one Preload Pin (SG5, RSC2).
 /////
 
-constexpr bool SETUP_AT_START = true;   // false = only run it from the SETUP button
+constexpr bool SETUP_AT_START = false;  // true = also run it when the program starts. Off until the lift gears are solid
 constexpr int LIFT_CAL_POWER = 60;      // Out of 127, going up to find the top
 constexpr double LIFT_TOP_MARGIN = 20;  // Motor degrees under the top where the lift stops after
 constexpr int CAL_TIMEOUT_MS = 4000;    // Give up finding an end after this long
