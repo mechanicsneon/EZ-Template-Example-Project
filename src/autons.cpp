@@ -466,6 +466,22 @@ void blue_right_two_goals() {
 /////
 
 // Left Toggle, 3 Pins, park. 33 points, about 18 s
+// Drivetrain only (no lift or claw): drive into the Midfield and stop. 8 points, about 3 s
+void skills_park() {
+  blue = false;
+  start_at(START_LEFT);
+  drive_forward(3);
+  drive_to({-28, -12});
+  drive_to({-13, -8});  // Park in the Midfield
+}
+
+// Match, drivetrain only: just drive 12" off the wall, from any start spot. Ending the
+// Autonomous Period off the wall lets our partner still earn the Autonomous Win Point
+void drive_off() {
+  chassis.pid_drive_set(12, DRIVE_SPEED);
+  chassis.pid_wait();
+}
+
 void skills_quick() {
   blue = false;
   start_at(START_LEFT);

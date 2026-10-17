@@ -24,12 +24,14 @@ void blue_right_stack();
 void blue_top_stack();
 
 // Backups: Toggle only, no claw needed
+void drive_off();  // Drivetrain only: 12" off the wall
 void red_left_toggle_only();
 void red_bottom_toggle_only();
 void blue_right_toggle_only();
 void blue_top_toggle_only();
 
 // Skills (60 seconds)
+void skills_park();
 void skills_quick();
 void skills_toggles();
 
