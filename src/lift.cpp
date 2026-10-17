@@ -81,12 +81,13 @@ double read_position() {
 /////
 
 const double FLOOR = cfg::LIFT_FLOOR_DEG;
+constexpr bool HARD_STOP = false;  // OFF (2026-10-17): lift can go below its start spot. true = turn the hard stop back on
 
 // EVERY lift power goes through here. HARD STOP: never powers the lift down at or under the
 // floor, and lowering fades out over the slow zone so it can't coast through the stop
 void power(double p) {
   double pos = read_position();
-  if (p < 0) {
+  if (HARD_STOP && p < 0) {
     double room = pos - FLOOR;
     if (room <= 0) {
       arm.brake();
@@ -137,7 +138,7 @@ void lift_task() {
     }
 
     // Sagged under the hard stop (bumped, or drifted while disabled): back up to it
-    if (mode == HOLD && read_position() < FLOOR - SAG_DEG && !pros::competition::is_disabled()) go_to(FLOOR);
+    if (HARD_STOP && mode == HOLD && read_position() < FLOOR - SAG_DEG && !pros::competition::is_disabled()) go_to(FLOOR);
 
     if (mode == MANUAL) {
       if (pros::millis() - manual_ms > (uint32_t)MANUAL_FRESH_MS) {
