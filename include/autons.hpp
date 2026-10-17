@@ -17,6 +17,12 @@ void blue_right_two_goals();
 void red_bottom_two_goals();
 void blue_top_two_goals();
 
+// Win Point pair: we run one, the partner runs the other (Cup + Pin stacked on each Preload)
+void red_left_stack();
+void red_bottom_stack();
+void blue_right_stack();
+void blue_top_stack();
+
 // Backups: Toggle only, no claw needed
 void red_left_toggle_only();
 void red_bottom_toggle_only();

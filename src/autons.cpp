@@ -160,14 +160,16 @@ struct ToggleSpot {
   Pt spot;
   double heading;  // Facing away from the wall
 };
-const ToggleSpot TOGGLE_LEFT = {{-55.2, 0}, 90};
-const ToggleSpot TOGGLE_BOTTOM = {{0, -55.2}, 0};
-constexpr double WALL_GAP = 61.2;    // Field center to robot center when its back is flat on a wall
+const ToggleSpot TOGGLE_LEFT = {{-56.7, 0}, 90};
+const ToggleSpot TOGGLE_BOTTOM = {{0, -56.7}, 0};
+// Field center to robot center when its back is flat on a wall: 70.2" to the wall minus half the
+// robot's 15" length (robot is 15" front to back, 14.5" side to side)
+constexpr double WALL_GAP = 62.7;
 
-// Legal starts (SG1): against the wall, centered in front of the Toggle, between the wall Cups.
+// Legal starts (SG1): back against the wall, centered in front of the Toggle, between the wall Cups.
 // The two red robots must be in different Quadrants, so agree with your partner who takes which
-const Pose START_LEFT = {{-61.2, 0}, 90};
-const Pose START_BOTTOM = {{0, -61.2}, 0};
+const Pose START_LEFT = {{-62.7, 0}, 90};
+const Pose START_BOTTOM = {{0, -62.7}, 0};
 
 // Claw reach, pick height, Toggle bumps etc. live in include/robot_config.hpp
 using cfg::BUMP_MS;
@@ -186,7 +188,7 @@ bool blue = false;  // Blue routes: every point turned 180 degrees about the cen
 Pt side(Pt p) { return blue ? Pt{-p.x, -p.y} : p; }
 
 void start_at(Pose s) {
-  claw::grab();  // Grip the Preload: the claw starts open when the program starts
+  claw::grab();  // Grip the Preload (setup already closed it; this covers setup being skipped)
   Pt p = side(s.p);
   chassis.odom_enable(true);
   chassis.odom_xyt_set(p.x, p.y, blue ? s.heading + 180 : s.heading);
@@ -231,6 +233,16 @@ void place(Goal goal, double back_off) {
 void pick(Pt spot, double back_off) {
   logger::event("auton: pick at (" + std::to_string((int)spot.x) + ", " + std::to_string((int)spot.y) + ")");
   lift::move_to_height(PICK_HEIGHT);
+  face_and_drive(spot, CLAW_REACH);
+  lift::wait();
+  claw::grab();
+  back(back_off);
+}
+
+// Take a Cup off the floor once its Pin is gone (lift all the way down), then back straight off
+[[maybe_unused]] void pick_cup(Pt spot, double back_off) {
+  logger::event("auton: pick cup at (" + std::to_string((int)spot.x) + ", " + std::to_string((int)spot.y) + ")");
+  lift::move_to_height(0);  // TODO: test the claw closes on a Cup at the bottom
   face_and_drive(spot, CLAW_REACH);
   lift::wait();
   claw::grab();
@@ -288,18 +300,18 @@ void set_toggle(ToggleSpot t) {
 // Left wall start: left Toggle, Preload into the left red Goal. About 4 seconds, 15-20 points
 void left_toggle() {
   start_at(START_LEFT);
-  drive_forward(4);
+  drive_forward(3);
   set_toggle(TOGGLE_LEFT);
-  drive_to({-52.6, -8.5});
+  drive_to({-52, -10});
   place(GOAL_RED_LEFT, 4);
 }
 
 // Bottom wall start: bottom Toggle, Preload into the bottom red Goal. About 4 seconds, 15-20 points
 void bottom_toggle() {
   start_at(START_BOTTOM);
-  drive_forward(4);
+  drive_forward(3);
   set_toggle(TOGGLE_BOTTOM);
-  drive_to({-8.5, -52.6});
+  drive_to({-10, -52});
   place(GOAL_RED_BOTTOM, 4);
 }
 
@@ -307,14 +319,13 @@ void bottom_toggle() {
 // the bottom red Goal. Uses both red Goals, so your partner shouldn't. About 11 seconds, 20-25 points
 void left_two_goals() {
   start_at(START_LEFT);
-  drive_forward(4);
+  drive_forward(3);
   set_toggle(TOGGLE_LEFT);
-  drive_to({-52.6, -8.5});
+  drive_to({-52, -10});
   place(GOAL_RED_LEFT, 4);
-  drive_to({-38, -3.9});
+  drive_to({-36.1, -3.4});
   pick(MID_WEST, 4);
-  drive_to({-36, -8});
-  drive_to({-33.8, -34.8});
+  drive_to({-30.5, -35});
   place(GOAL_RED_BOTTOM, 4);
 }
 
@@ -322,13 +333,13 @@ void left_two_goals() {
 // our Quadrant's neutral Goal then counts for us (10 points). About 2 seconds
 void left_toggle_only() {
   start_at(START_LEFT);
-  drive_forward(4);
+  drive_forward(3);
   set_toggle(TOGGLE_LEFT);
 }
 
 void bottom_toggle_only() {
   start_at(START_BOTTOM);
-  drive_forward(4);
+  drive_forward(3);
   set_toggle(TOGGLE_BOTTOM);
 }
 
@@ -337,18 +348,62 @@ void bottom_toggle_only() {
 // shouldn't. About 11 seconds, 20-25 points
 void bottom_two_goals() {
   start_at(START_BOTTOM);
-  drive_forward(4);
+  drive_forward(3);
   set_toggle(TOGGLE_BOTTOM);
-  drive_to({-8.5, -52.6});
+  drive_to({-10, -52});
   place(GOAL_RED_BOTTOM, 4);
-  drive_to({-3.9, -38});
+  drive_to({-3.4, -36.1});
   pick(MID_SOUTH, 4);
-  drive_to({-8, -36});
-  drive_to({-34.8, -33.8});
+  drive_to({-35, -30.6});
   place(GOAL_RED_LEFT, 4);
 }
 
+// Win Point pair, half 1: left Toggle, Preload into the left red Goal, then the Midfield's west
+// Cup with its Pin still on top stacked onto it. Run with a partner doing the bottom version.
+// About 13 seconds (tight: test it), 25 points; both halves together make the Win Point
+void left_stack() {
+  start_at(START_LEFT);
+  drive_forward(3);
+  set_toggle(TOGGLE_LEFT);
+  drive_to({-52, -10});
+  place(GOAL_RED_LEFT, 4);
+  drive_to({-36.1, -3.4});
+  pick_cup(MID_WEST, 4);  // The Cup with its Pin still on top
+  drive_to({-42.3, -10.4});
+  place(GOAL_RED_LEFT, 4);  // One release scores the Cup and the Pin on it
+}
+
+// Win Point pair, half 2: the same from the bottom wall, into the bottom red Goal
+void bottom_stack() {
+  start_at(START_BOTTOM);
+  drive_forward(3);
+  set_toggle(TOGGLE_BOTTOM);
+  drive_to({-10, -52});
+  place(GOAL_RED_BOTTOM, 4);
+  drive_to({-3.4, -36.1});
+  pick_cup(MID_SOUTH, 4);  // The Cup with its Pin still on top
+  drive_to({-10.4, -42.3});
+  place(GOAL_RED_BOTTOM, 4);  // One release scores the Cup and the Pin on it
+}
+
 }  // namespace
+
+void red_left_stack() {
+  blue = false;
+  left_stack();
+}
+void red_bottom_stack() {
+  blue = false;
+  bottom_stack();
+}
+void blue_right_stack() {
+  blue = true;
+  left_stack();
+}
+void blue_top_stack() {
+  blue = true;
+  bottom_stack();
+}
 
 void red_bottom_two_goals() {
   blue = false;
@@ -413,18 +468,18 @@ void blue_right_two_goals() {
 void skills_quick() {
   blue = false;
   start_at(START_LEFT);
-  drive_forward(4);
+  drive_forward(3);
   set_toggle(TOGGLE_LEFT);
-  drive_to({-52.6, -8.5});
+  drive_to({-52, -10});
   place(GOAL_RED_LEFT, 4);
-  drive_to({-34.2, -12.9});
+  drive_to({-34.2, -16.1});
   pick(STACK_RED_INNER, 4);
-  drive_to({-41.6, 8.5});
+  drive_to({-43.5, 10});
   place(GOAL_NEUTRAL_LEFT, 4);
-  drive_to({-37.1, 6.3});
+  drive_to({-35.8, 4.4});
   pick(MID_WEST, 4);
-  drive_to({-34, -12});
-  drive_to({-12.3, -10.3});
+  drive_to({-28, -12});
+  drive_to({-12.1, -7});
   place(GOAL_CENTER, 4);
   drive_to({-13, -8});  // Park in the Midfield
 }
@@ -433,32 +488,30 @@ void skills_quick() {
 void skills_toggles() {
   blue = false;
   start_at(START_LEFT);
-  drive_forward(4);
+  drive_forward(3);
   set_toggle(TOGGLE_LEFT);
-  drive_to({-52.6, -8.5});
+  drive_to({-52, -10});
   place(GOAL_RED_LEFT, 4);
-  drive_to({-34.2, -12.9});
+  drive_to({-34.2, -16.1});
   pick(STACK_RED_INNER, 4);
-  drive_to({-41.6, 8.5});
+  drive_to({-43.5, 10});
   place(GOAL_NEUTRAL_LEFT, 4);
-  drive_to({-34, -10});
-  drive_to({-14, -12});
-  drive_to({-8, -36});
+  drive_to({-34, -6});
+  drive_to({-12, -20});
   set_toggle(TOGGLE_BOTTOM);
-  drive_to({-10.5, -57.7});
+  drive_to({-8.8, -60.1});
   pick(WALL_BOTTOM_LEFT, 4);
-  drive_to({-10.4, -56.3});
+  drive_to({-12.8, -56.1});
   place(GOAL_RED_BOTTOM, 4);
-  drive_to({10.5, -57.7});
+  drive_to({8.8, -60.1});
   pick(WALL_BOTTOM_RIGHT, 4);
-  drive_to({10.4, -56.3});
+  drive_to({12.8, -56.1});
   place(GOAL_NEUTRAL_BOTTOM, 4);
-  drive_to({-8, -36});
-  drive_to({-34, -34});
-  drive_to({-36.5, -36.5});
+  drive_to({-34, -58});
+  drive_to({-37.1, -55.5});
   pick(STACK_RED_OUTER, 4);
-  drive_to({-34, -12});
-  drive_to({-12.3, -10.3});
+  drive_to({-14, -58});
+  drive_to({-8, -11.5});
   place(GOAL_CENTER, 4);
   drive_to({-13, -8});  // Park in the Midfield
 }

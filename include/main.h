@@ -52,6 +52,7 @@
 #include "robot_config.hpp"
 #include "assist.hpp"
 #include "logger.hpp"
+#include "setup.hpp"
 
 
 /**

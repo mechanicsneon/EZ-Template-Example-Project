@@ -18,6 +18,7 @@ void driver_timer_start() {}
 #include <string>
 #include <vector>
 
+#include "auton_previews.hpp"
 #include "liblvgl/lvgl.h"
 #include "main.h"
 
@@ -257,12 +258,13 @@ constexpr int MAX_TILES = 8;
 
 // Which screen the driver picked with the touch buttons. Resets whenever the mode changes.
 // AUTOMATIC: the pre-match check while disabled, the HUD while enabled
-enum ScreenChoice { AUTOMATIC, SHOW_HUD, SHOW_SELECTOR, SHOW_CHECKS };
+enum ScreenChoice { AUTOMATIC, SHOW_HUD, SHOW_SELECTOR, SHOW_CHECKS, SHOW_PICKER };
 std::atomic<int> screen_choice{AUTOMATIC};
 
 lv_obj_t *hud_screen = nullptr;
 lv_obj_t *selector_screen = nullptr;  // EZ-Template's auton selector (LLEMU)
 lv_obj_t *checks_screen = nullptr;    // Pre-match check
+lv_obj_t *picker_screen = nullptr;    // Our auton picker (tiles + field map)
 
 constexpr int CHECK_COUNT = 8;
 lv_obj_t *check_status, *check_status_label, *check_auton, *check_start;
@@ -294,7 +296,7 @@ lv_obj_t *text(lv_obj_t *parent, int x, int y, const lv_font_t *font, lv_color_t
   return l;
 }
 
-lv_obj_t *button(lv_obj_t *parent, const char *str, lv_event_cb_t on_click) {
+lv_obj_t *button(lv_obj_t *parent, const char *str, lv_event_cb_t on_click, void *user_data = nullptr) {
   lv_obj_t *b = lv_btn_create(parent);
   lv_obj_set_style_bg_color(b, PANEL, 0);
   lv_obj_set_style_bg_color(b, OFF, LV_STATE_PRESSED);
@@ -302,7 +304,7 @@ lv_obj_t *button(lv_obj_t *parent, const char *str, lv_event_cb_t on_click) {
   lv_obj_set_style_border_width(b, 2, 0);
   lv_obj_set_style_radius(b, 8, 0);
   lv_obj_set_style_shadow_width(b, 0, 0);
-  lv_obj_add_event_cb(b, on_click, LV_EVENT_CLICKED, nullptr);
+  lv_obj_add_event_cb(b, on_click, LV_EVENT_CLICKED, user_data);
   lv_obj_t *l = lv_label_create(b);
   lv_obj_set_style_text_font(l, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_color(l, CYAN, 0);
@@ -365,7 +367,7 @@ void build_hud_screen() {
   lv_obj_set_width(auton_label, 200);
   lv_label_set_long_mode(auton_label, LV_LABEL_LONG_DOT);
   lift_label = text(auton, 120, 6, &lv_font_montserrat_12, CYAN, "");
-  lv_obj_t *pick = button(auton, "PICK AUTON", [](lv_event_t *) { screen_choice = SHOW_SELECTOR; });
+  lv_obj_t *pick = button(auton, "PICK AUTON", [](lv_event_t *) { screen_choice = SHOW_PICKER; });
   lv_obj_set_size(pick, 130, 38);
   lv_obj_align(pick, LV_ALIGN_RIGHT_MID, -7, 0);
   lv_obj_t *checks = button(auton, "CHECKS", [](lv_event_t *) { screen_choice = SHOW_CHECKS; });
@@ -385,7 +387,7 @@ void build_checks_screen() {
   text(checks_screen, 10, 9, &lv_font_montserrat_20, CYAN, "PRE-MATCH");
   check_status = box(checks_screen, 136, 8, 150, 26, OFF, 13);
   check_status_label = text(check_status, 0, 0, &lv_font_montserrat_14, DARK_TEXT, "");
-  lv_obj_t *auton = button(checks_screen, "AUTON", [](lv_event_t *) { screen_choice = SHOW_SELECTOR; });
+  lv_obj_t *auton = button(checks_screen, "AUTON", [](lv_event_t *) { screen_choice = SHOW_PICKER; });
   lv_obj_set_size(auton, 90, 32);
   lv_obj_align(auton, LV_ALIGN_TOP_RIGHT, -84, 4);
   lv_obj_t *hud = button(checks_screen, "HUD", [](lv_event_t *) { screen_choice = SHOW_HUD; });
@@ -394,10 +396,14 @@ void build_checks_screen() {
 
   lv_obj_t *auton_box = box(checks_screen, 8, 42, 464, 66, PANEL);
   check_auton = text(auton_box, 10, 6, &lv_font_montserrat_20, TEXT, "");
-  lv_obj_set_width(check_auton, 444);
+  lv_obj_set_width(check_auton, 340);
   lv_label_set_long_mode(check_auton, LV_LABEL_LONG_DOT);
   check_start = text(auton_box, 10, 32, &lv_font_montserrat_12, MUTED, "");
-  lv_obj_set_width(check_start, 444);
+  lv_obj_set_width(check_start, 340);
+  // Calibrate + load the Preload (only moves while the robot is enabled, so before plugging into the field)
+  lv_obj_t *setup_btn = button(auton_box, "SETUP", [](lv_event_t *) { setup::start(); });
+  lv_obj_set_size(setup_btn, 96, 44);
+  lv_obj_align(setup_btn, LV_ALIGN_RIGHT_MID, -8, 0);
   lv_label_set_long_mode(check_start, LV_LABEL_LONG_WRAP);
 
   lv_obj_t *list = box(checks_screen, 8, 114, 464, 118, PANEL);
@@ -422,6 +428,12 @@ void update_checks(const Status &s) {
     size_t br = name.find("\n\n");
     title = name.substr(0, name.find('\n'));
     if (br != std::string::npos) start = name.substr(br + 2);
+    for (auto &p : previews::ALL)
+      if (title == p.title) {
+        char est[48];
+        snprintf(est, sizeof(est), "~%d pts, %.0f s.  ", p.points, p.seconds);
+        start = est + start;
+      }
   }
   lv_label_set_text(check_auton, title.c_str());
   lv_label_set_text(check_start, start.c_str());
@@ -433,7 +445,7 @@ void update_checks(const Status &s) {
   bool dup = std::any_of(s.warnings.begin(), s.warnings.end(), [](const Warning &w) { return w.key.rfind("dup", 0) == 0; });
   int saved = lift::heights_saved();
   bool sd = pros::usd::is_installed();
-  bool lift_down = lift::position() < 30;
+  auto setup_state = setup::state();
   bool imu_ready = s.imu_ok && chassis.drive_imu_calibrated();
   bool field = pros::competition::is_connected();
 
@@ -448,7 +460,7 @@ void update_checks(const Status &s) {
       {saved == lift::HEIGHT_COUNT ? OK : WARN,
        saved == lift::HEIGHT_COUNT ? "Lift heights saved" : std::to_string(saved) + "/3 lift heights saved (A+R1)"},
       {sd ? OK : WARN, sd ? "SD card in (logs on)" : "No SD card: no logs/heights"},
-      {lift_down ? OK : WARN, lift_down ? "Lift down" : "Lift is up: lower it"},
+      {setup_state == setup::DONE ? OK : setup_state == setup::FAILED ? BAD : WARN, setup::status_text()},
       {field ? OK : WARN, field ? "Field connected" : "Not on a field/switch"},
   };
 
@@ -533,6 +545,240 @@ void update_hud(const Status &s) {
   lv_label_set_text_fmt(lift_label, "LIFT %d\xC2\xB0   %s", (int)lift::position(), lift::status_text().c_str());
 }
 
+/////
+// Auton picker: tap a category, tap an auton (that's it, it's picked and saved to the SD card).
+// The map shows where it starts and the path it drives, with its estimated points + time
+/////
+
+enum Category { CAT_RED, CAT_BLUE, CAT_SKILLS, CAT_BACKUP, CAT_TEST, CAT_COUNT };
+const char *CAT_NAMES[CAT_COUNT] = {"RED", "BLUE", "SKILLS", "BACKUP", "TEST"};
+constexpr int MAP = 112;                // Map size in pixels
+constexpr double MAP_S = MAP / 140.4;  // Pixels per field inch
+constexpr int MAX_PATH = 64;
+
+int picker_cat = CAT_RED;
+lv_obj_t *cat_buttons[CAT_COUNT], *cat_labels[CAT_COUNT];
+lv_obj_t *tile_list, *map_box, *path_line, *start_box, *end_dot;
+lv_obj_t *info_points, *info_time, *info_note, *info_title, *info_desc;
+std::vector<std::pair<lv_obj_t *, int>> tiles_shown;  // Tile + its index in the auton selector
+lv_point_t path_pts[MAX_PATH];
+
+std::string auton_title(int i) {
+  const std::string &n = ez::as::auton_selector.Autons[i].Name;
+  return n.substr(0, n.find('\n'));
+}
+std::string auton_desc(int i) {
+  const std::string &n = ez::as::auton_selector.Autons[i].Name;
+  size_t br = n.find("\n\n");
+  return br == std::string::npos ? "" : n.substr(br + 2);
+}
+Category category_of(int i) {
+  std::string t = auton_title(i);
+  if (t.rfind("Test", 0) == 0) return CAT_TEST;
+  if (t.rfind("Skills", 0) == 0) return CAT_SKILLS;
+  if (auton_desc(i).rfind("BACKUP", 0) == 0) return CAT_BACKUP;
+  return t.rfind("Blue", 0) == 0 ? CAT_BLUE : CAT_RED;
+}
+const previews::Preview *preview_of(int i) {
+  std::string t = auton_title(i);
+  for (auto &p : previews::ALL)
+    if (t == p.title) return &p;
+  return nullptr;
+}
+int selected_index() {
+  auto &as = ez::as::auton_selector;
+  return std::clamp(as.last_auton_page_current, 0, std::max(0, (int)as.Autons.size() - 1));
+}
+// Pick an auton: what autonomous() runs, saved so it survives a restart
+void select_auton(int i) {
+  auto &as = ez::as::auton_selector;
+  as.auton_page_current = i;
+  as.last_auton_page_current = i;
+  ez::as::auto_sd_update();
+}
+
+// Field inches -> map pixels. The map is drawn from the audience like the field diagrams
+// (red Alliance Station on the left); Blue autons are red's path turned 180 degrees
+lv_point_t map_px(double x, double y) {
+  return {(lv_coord_t)std::lround((x + 70.2) * MAP_S), (lv_coord_t)std::lround((70.2 - y) * MAP_S)};
+}
+
+lv_obj_t *dot(lv_obj_t *parent, double x, double y, int size, lv_color_t color) {
+  lv_point_t p = map_px(x, y);
+  return box(parent, p.x - size / 2, p.y - size / 2, size, size, color, size / 2);
+}
+
+void update_preview(int i) {
+  auto *p = preview_of(i);
+  bool blue = auton_title(i).rfind("Blue", 0) == 0;
+  lv_color_t alliance = blue ? lv_color_hex(0x2F7DF6) : lv_color_hex(0xE23B3B);
+  if (p && !p->path.empty()) {
+    int n = std::min((int)p->path.size(), MAX_PATH);
+    for (int k = 0; k < n; k++) {
+      double x = p->path[k].x, y = p->path[k].y;
+      path_pts[k] = blue ? map_px(-x, -y) : map_px(x, y);
+    }
+    lv_line_set_points(path_line, path_pts, n);
+    lv_obj_clear_flag(path_line, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_pos(start_box, path_pts[0].x - 7, path_pts[0].y - 7);
+    lv_obj_set_style_border_color(start_box, alliance, 0);
+    lv_obj_clear_flag(start_box, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_pos(end_dot, path_pts[n - 1].x - 4, path_pts[n - 1].y - 4);
+    lv_obj_clear_flag(end_dot, LV_OBJ_FLAG_HIDDEN);
+    lv_label_set_text_fmt(info_points, "%d", p->points);
+    lv_label_set_text_fmt(info_time, "%.0f s", p->seconds);
+    lv_label_set_text(info_note, p->note);
+  } else {
+    lv_obj_add_flag(path_line, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(start_box, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(end_dot, LV_OBJ_FLAG_HIDDEN);
+    lv_label_set_text(info_points, "-");
+    lv_label_set_text(info_time, "");
+    lv_label_set_text(info_note, category_of(i) == CAT_TEST ? "PID test, not for matches" : "");
+  }
+  lv_label_set_text(info_title, auton_title(i).c_str());
+  lv_label_set_text(info_desc, auton_desc(i).c_str());
+}
+
+void style_tiles() {
+  int sel = selected_index();
+  for (auto &[t, i] : tiles_shown) {
+    bool on = i == sel;
+    lv_obj_set_style_border_color(t, on ? CYAN : OFF, 0);
+    lv_obj_set_style_bg_color(t, on ? lv_color_hex(0x123040) : PANEL, 0);
+  }
+}
+
+void build_tiles() {
+  lv_obj_clean(tile_list);
+  tiles_shown.clear();
+  auto &as = ez::as::auton_selector;
+  int count = (int)as.Autons.size();
+  for (int i = picker_cat == CAT_TEST ? -1 : 0; i < count; i++) {
+    if (i >= 0 && category_of(i) != picker_cat) continue;
+    lv_obj_t *t = lv_btn_create(tile_list);
+    lv_obj_set_size(t, 226, 48);
+    lv_obj_set_style_radius(t, 8, 0);
+    lv_obj_set_style_border_width(t, 2, 0);
+    lv_obj_set_style_shadow_width(t, 0, 0);
+    lv_obj_set_style_pad_all(t, 0, 0);
+    lv_obj_t *name = text(t, 10, 4, &lv_font_montserrat_20, TEXT, i < 0 ? "EZ screen" : auton_title(i).c_str());
+    lv_obj_set_width(name, 206);
+    lv_label_set_long_mode(name, LV_LABEL_LONG_DOT);
+    auto *p = i < 0 ? nullptr : preview_of(i);
+    char sub[64];
+    if (i < 0)
+      snprintf(sub, sizeof(sub), "Odometry readout + PID tuner page");
+    else if (p)
+      snprintf(sub, sizeof(sub), "~%d pts  %.0f s%s%s", p->points, p->seconds, *p->note ? "  " : "", p->note);
+    else
+      snprintf(sub, sizeof(sub), "%s", auton_desc(i).substr(0, 40).c_str());
+    lv_obj_t *meta = text(t, 10, 28, &lv_font_montserrat_12, MUTED, sub);
+    lv_obj_set_width(meta, 206);
+    lv_label_set_long_mode(meta, LV_LABEL_LONG_DOT);
+    lv_obj_add_event_cb(
+        t,
+        [](lv_event_t *e) {
+          int i = (int)(intptr_t)lv_event_get_user_data(e);
+          if (i < 0) {  // EZ-Template's own screen (odometry readout)
+            screen_choice = SHOW_SELECTOR;
+            return;
+          }
+          select_auton(i);
+          style_tiles();
+          update_preview(i);
+          master.rumble(".");
+        },
+        LV_EVENT_CLICKED, (void *)(intptr_t)i);
+    tiles_shown.push_back({t, i});
+  }
+  style_tiles();
+  for (int c = 0; c < CAT_COUNT; c++) {
+    lv_obj_set_style_bg_color(cat_buttons[c], c == picker_cat ? CYAN : PANEL, 0);
+    lv_obj_set_style_text_color(cat_labels[c], c == picker_cat ? DARK_TEXT : CYAN, 0);
+  }
+}
+
+void open_picker() {
+  int sel = selected_index();
+  if (!ez::as::auton_selector.Autons.empty()) picker_cat = category_of(sel);
+  build_tiles();
+  if (!ez::as::auton_selector.Autons.empty()) update_preview(sel);
+}
+
+void build_picker_screen() {
+  picker_screen = lv_obj_create(nullptr);
+  lv_obj_set_style_bg_color(picker_screen, BG, 0);
+  lv_obj_clear_flag(picker_screen, LV_OBJ_FLAG_SCROLLABLE);
+
+  // Top bar: category tabs + DONE
+  text(picker_screen, 8, 11, &lv_font_montserrat_14, CYAN, "AUTON");
+  for (int c = 0; c < CAT_COUNT; c++) {
+    cat_buttons[c] = button(
+        picker_screen, CAT_NAMES[c],
+        [](lv_event_t *e) {
+          picker_cat = (int)(intptr_t)lv_event_get_user_data(e);
+          build_tiles();
+        },
+        (void *)(intptr_t)c);
+    lv_obj_set_size(cat_buttons[c], 64, 30);
+    lv_obj_set_pos(cat_buttons[c], 66 + c * 68, 4);
+    cat_labels[c] = lv_obj_get_child(cat_buttons[c], 0);
+  }
+  lv_obj_t *done = button(picker_screen, "DONE", [](lv_event_t *) { screen_choice = AUTOMATIC; });
+  lv_obj_set_size(done, 66, 30);
+  lv_obj_set_pos(done, 408, 4);
+
+  // Left: tiles for the category (scrolls if there are more than fit)
+  tile_list = lv_obj_create(picker_screen);
+  lv_obj_remove_style_all(tile_list);
+  lv_obj_set_pos(tile_list, 6, 40);
+  lv_obj_set_size(tile_list, 232, 196);
+  lv_obj_set_flex_flow(tile_list, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_style_pad_row(tile_list, 6, 0);
+  lv_obj_add_flag(tile_list, LV_OBJ_FLAG_SCROLLABLE);
+
+  // Right: field map + estimate + description
+  map_box = box(picker_screen, 246, 40, MAP, MAP, lv_color_hex(0x2F343C), 4);
+  static lv_point_t auton_line[2], midfield[5];
+  auton_line[0] = map_px(-58.5, 58.5);
+  auton_line[1] = map_px(58.5, -58.5);
+  const double m = 23.55;
+  midfield[0] = map_px(-m, 0); midfield[1] = map_px(0, m); midfield[2] = map_px(m, 0); midfield[3] = map_px(0, -m); midfield[4] = map_px(-m, 0);
+  for (int k = 0; k < 2; k++) {
+    lv_obj_t *l = lv_line_create(map_box);
+    lv_line_set_points(l, k ? midfield : auton_line, k ? 5 : 2);
+    lv_obj_set_style_line_width(l, 1, 0);
+    lv_obj_set_style_line_color(l, lv_color_hex(0xD0D4DA), 0);
+  }
+  const lv_color_t RED_C = lv_color_hex(0xE23B3B), BLUE_C = lv_color_hex(0x2F7DF6), BLACK_C = lv_color_hex(0x15171B);
+  const double T1 = 23.55, T2 = 47.1;
+  dot(map_box, 0, 0, 8, BLACK_C);
+  dot(map_box, -T2, -T1, 7, RED_C); dot(map_box, -T1, -T2, 7, RED_C);
+  dot(map_box, T2, T1, 7, BLUE_C); dot(map_box, T1, T2, 7, BLUE_C);
+  dot(map_box, -T2, T1, 7, BLACK_C); dot(map_box, T1, -T2, 7, BLACK_C); dot(map_box, -T1, T2, 7, BLACK_C); dot(map_box, T2, -T1, 7, BLACK_C);
+  path_line = lv_line_create(map_box);
+  lv_obj_set_style_line_width(path_line, 3, 0);
+  lv_obj_set_style_line_color(path_line, CYAN, 0);
+  lv_obj_set_style_line_rounded(path_line, true, 0);
+  start_box = box(map_box, 0, 0, 14, 14, BG, 3);
+  lv_obj_set_style_border_width(start_box, 3, 0);
+  end_dot = box(map_box, 0, 0, 8, 8, MAGENTA, 4);
+
+  text(picker_screen, 366, 40, &lv_font_montserrat_12, MUTED, "EST. POINTS");
+  info_points = text(picker_screen, 366, 52, &lv_font_montserrat_36, TEXT, "");
+  info_time = text(picker_screen, 366, 94, &lv_font_montserrat_20, TEXT, "");
+  info_note = text(picker_screen, 366, 118, &lv_font_montserrat_12, WARM, "");
+  lv_obj_set_width(info_note, 108);
+  lv_label_set_long_mode(info_note, LV_LABEL_LONG_WRAP);
+  info_title = text(picker_screen, 246, 158, &lv_font_montserrat_20, CYAN, "");
+  lv_obj_set_width(info_title, 228);
+  lv_label_set_long_mode(info_title, LV_LABEL_LONG_DOT);
+  info_desc = text(picker_screen, 246, 182, &lv_font_montserrat_12, TEXT, "");
+  lv_obj_set_size(info_desc, 228, 56);
+  lv_label_set_long_mode(info_desc, LV_LABEL_LONG_WRAP);
+}
+
 // Runs inside LVGL's own task, so it's safe to touch the screen here
 void brain_tick(lv_timer_t *) {
   // Build everything on the first tick, inside LVGL's task (LVGL isn't thread safe)
@@ -544,6 +790,7 @@ void brain_tick(lv_timer_t *) {
     lv_obj_align(back, LV_ALIGN_TOP_RIGHT, -6, 6);
     build_hud_screen();
     build_checks_screen();
+    build_picker_screen();
   }
 
   static int last_mode = -1;
@@ -563,10 +810,15 @@ void brain_tick(lv_timer_t *) {
     want = selector_screen;
   else if (screen_choice == SHOW_CHECKS)
     want = checks_screen;
+  else if (screen_choice == SHOW_PICKER)
+    want = picker_screen;
   else
     want = s.mode == DISABLED ? checks_screen : hud_screen;  // Before the match: the pre-match check
 
-  if (lv_scr_act() != want) lv_scr_load(want);
+  if (lv_scr_act() != want) {
+    if (want == picker_screen) open_picker();  // Fresh tiles, opened to the selected auton's category
+    lv_scr_load(want);
+  }
   if (want == hud_screen) update_hud(s);
   if (want == checks_screen) update_checks(s);
 }

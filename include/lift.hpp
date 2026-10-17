@@ -8,14 +8,14 @@
 //   L1 / L2    manual up / down (always wins, cancels any macro)
 //   R1         PLACE: lift to the next height, release, back up, lower. Next press goes one height higher
 //   A + R1     TEACH: save where the lift is right now as the next height (stored on the SD card)
-//   R2         cancel + lower the lift to the bottom
-//   A + R2     the lift is at the bottom right now: reset it to 0
+//   R2         cancel + lower the lift to the hard stop
 //   UP / DOWN  change which height is next
 //   Y          go back to height 1
 //   A + Y      lift to the height for taking a Pin off a Cup (PICK_HEIGHT in robot_config.hpp)
 //
-// The lift counts 0 as wherever it is when the program starts, so start with it all the way down
-// (or lower it by hand and press A + R2).
+// HARD STOP: wherever the lift is when the program starts is as low as it will ever go (driver,
+// macros, autons, setup). Start the program with the lift set by hand 2-3" above the field.
+// After setup finds the top, it won't be driven past that either. See robot_config.hpp.
 namespace lift {
 
 // Saved heights match the three Goal heights in Override (autons use these too):
@@ -38,6 +38,15 @@ std::string status_text();
 bool status_is_new();  // True for a second or so after something changes, so the HUD shows it right away
 int next_height();     // 1..HEIGHT_COUNT
 int heights_saved();   // How many of the heights have been saved (0..HEIGHT_COUNT)
-double position();     // Motor degrees, 0 = bottom
+double position();     // Motor degrees, 0 = the hard stop
+
+// For setup (setup.cpp)
+void show_message(const std::string &text);  // Shows on the HUD for a moment
+void stop();                                 // Stop + hold where it is
+// Drive up slowly until it stalls; that minus a margin becomes the top limit. Then backs off to it.
+// False if it timed out, didn't move, or cancelled() said stop
+bool find_top(bool (*cancelled)());
+double top_deg();  // NAN until find_top() worked
+bool moving();     // True while going to a height
 
 }  // namespace lift

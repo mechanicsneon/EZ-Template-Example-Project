@@ -17,5 +17,10 @@ void grab();
 void release();
 
 bool holding();  // True while the claw is closed
+void open();     // Same as release()
+
+// For setup (setup.cpp). cancelled() returning true stops them early
+bool calibrate_rotate(bool (*cancelled)());  // Finds both ends of the rotate motor, then goes home. True if no rotate motor
+void cycle_pistons(bool (*cancelled)());     // Tilt + flip out and back, claw closes and opens (ends open)
 
 }  // namespace claw

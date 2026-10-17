@@ -52,7 +52,8 @@ void initialize() {
   // Set the drive to your own constants from autons.cpp!
   default_constants();
 
-  // DR4B lift: saved heights + place macro (see lift.cpp). Start with the lift all the way down!
+  // DR4B lift: saved heights + place macro (see lift.cpp). Start the program with the lift set by
+  // hand 2-3" above the field: that spot is the lift's HARD STOP (robot_config.hpp)
   lift::initialize();
   claw::initialize();  // Claw type and ports: include/robot_config.hpp
   logger::initialize();  // Match logs on the SD card
@@ -72,6 +73,10 @@ void initialize() {
       {"Blue Top\n\nMatch: middle of the top wall. Top Toggle blue, Preload into the top blue Goal", blue_top_toggle},
       {"Blue Right 2\n\nMatch: middle of the right wall. Right Toggle blue, Preload + Midfield Pin into both blue Goals", blue_right_two_goals},
       {"Blue Top 2\n\nMatch: middle of the top wall. Top Toggle blue, Preload + Midfield Pin into both blue Goals", blue_top_two_goals},
+      {"Red Left Stack\n\nWIN POINT PAIR with partner on Red Bottom Stack. Left Toggle, Preload + Midfield Cup&Pin into the left red Goal", red_left_stack},
+      {"Red Bot Stack\n\nWIN POINT PAIR with partner on Red Left Stack. Bottom Toggle, Preload + Midfield Cup&Pin into the bottom red Goal", red_bottom_stack},
+      {"Blue Right Stack\n\nWIN POINT PAIR with partner on Blue Top Stack. Right Toggle, Preload + Midfield Cup&Pin into the right blue Goal", blue_right_stack},
+      {"Blue Top Stack\n\nWIN POINT PAIR with partner on Blue Right Stack. Top Toggle, Preload + Midfield Cup&Pin into the top blue Goal", blue_top_stack},
       {"Red L Toggle\n\nBACKUP, no claw needed. Middle of the left wall: left Toggle red, end off the wall (10 pts)", red_left_toggle_only},
       {"Red B Toggle\n\nBACKUP, no claw needed. Middle of the bottom wall: bottom Toggle red, end off the wall (10 pts)", red_bottom_toggle_only},
       {"Blue R Toggle\n\nBACKUP, no claw needed. Middle of the right wall: right Toggle blue, end off the wall (10 pts)", blue_right_toggle_only},
@@ -90,6 +95,9 @@ void initialize() {
 
   // Controller + brain HUD (see hud.cpp)
   hud::initialize();
+
+  // Calibrate the lift + claw, then load the Preload (robot_config.hpp). Runs in the background
+  setup::initialize();
 }
 
 /**
@@ -267,6 +275,8 @@ void opcontrol() {
     // Gives you some extras to make EZ-Template ezier
     ez_template_extras();
 
+    setup::opcontrol();  // Any button or stick cancels setup
+
     if (!lift::drive_busy() && !assist::drive_busy())  // Macros/assists drive the robot on their own
       chassis.opcontrol_tank();                         // Tank control
     // chassis.opcontrol_arcade_standard(ez::SPLIT);   // Standard split arcade
@@ -277,11 +287,13 @@ void opcontrol() {
     // . . .
     // Put more user control code here!
     // . . .
-    // DR4B lift: L1/L2 manual, R1 place, A+R1 save height, R2 down, A+R2 reset bottom, UP/DOWN/Y pick height
-    lift::opcontrol();
-
+    // DR4B lift: L1/L2 manual, R1 place, A+R1 save height, R2 down, UP/DOWN/Y pick height
     // Claw: B grab / let go, LEFT tilt, RIGHT flip. A+B = Toggle bump assist
-    claw::opcontrol();
+    // (Left alone while setup is moving them)
+    if (!setup::running()) {
+      lift::opcontrol();
+      claw::opcontrol();
+    }
     assist::opcontrol();
 
     pros::delay(ez::util::DELAY_TIME);  // This is used for timer calculations!  Keep this ez::util::DELAY_TIME
