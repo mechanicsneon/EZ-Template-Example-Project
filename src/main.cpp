@@ -287,7 +287,9 @@ void opcontrol() {
     // . . .
     // Put more user control code here!
     // . . .
-    // DR4B lift: L1/L2 manual, R1 place, A+R1 save height, R2 down, UP/DOWN/Y pick height
+    // DR4B lift: L1/L2 manual (full speed, stops at the hard stop, holds when let go), R1 place,
+    // A+R1 save height, R2 down, UP/DOWN/Y pick height. Don't power `arm` directly here: that
+    // would skip the lift's hard stop
     // Claw: B grab / let go, LEFT tilt, RIGHT flip. A+B = Toggle bump assist
     // (Left alone while setup is moving them)
     if (!setup::running()) {
