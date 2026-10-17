@@ -57,6 +57,7 @@ void initialize() {
   lift::initialize();
   claw::initialize();  // Claw type and ports: include/robot_config.hpp
   logger::initialize();  // Match logs on the SD card
+  laptop::initialize();  // Status + commands over USB for a laptop (see laptop.hpp)
 
   // These are already defaulted to these buttons, but you can change the left/right curve buttons here!
   // chassis.opcontrol_curve_buttons_left_set(pros::E_CONTROLLER_DIGITAL_LEFT, pros::E_CONTROLLER_DIGITAL_RIGHT);  // If using tank, only the left side is used.
@@ -277,7 +278,9 @@ void opcontrol() {
 
     setup::opcontrol();  // Any button or stick cancels setup
 
-    if (!lift::drive_busy() && !assist::drive_busy())  // Macros/assists drive the robot on their own
+    laptop::opcontrol();  // Moving a stick stops anything the laptop started
+
+    if (!lift::drive_busy() && !assist::drive_busy() && !laptop::drive_busy())  // Macros/assists/laptop drive on their own
       chassis.opcontrol_tank();                         // Tank control
     // chassis.opcontrol_arcade_standard(ez::SPLIT);   // Standard split arcade
     // chassis.opcontrol_arcade_standard(ez::SINGLE);  // Standard single arcade

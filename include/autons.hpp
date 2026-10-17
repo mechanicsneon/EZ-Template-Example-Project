@@ -32,3 +32,7 @@ void blue_top_toggle_only();
 // Skills (60 seconds)
 void skills_quick();
 void skills_toggles();
+
+// Laptop link: run one auton step sent over USB ("D -36 -4" = drive to that spot). See autons.cpp
+#include <string>
+bool route_step(const std::string &step, bool check_only = false);

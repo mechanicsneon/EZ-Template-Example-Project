@@ -1,3 +1,4 @@
+#include <sstream>
 #include <cmath>
 
 #include "main.h"
@@ -514,4 +515,43 @@ void skills_toggles() {
   drive_to({-8, -11.5});
   place(GOAL_CENTER, 4);
   drive_to({-13, -8});  // Park in the Midfield
+}
+
+/////
+// Laptop link (laptop.cpp): run an auton one step at a time, using the same helpers as the autons
+// above, so a route can be tried on the robot without uploading new code. One step per call, red's
+// side of the field (B 1 turns everything after it 180 degrees for blue):
+//   B blue(0/1)          S x y heading (start)      F inches (drive forward)     D x y (drive to)
+//   P x y height back    K x y back (pick a Pin)    C x y back (pick a Cup)      L x y back (load)
+//   G x y heading        (set a Toggle from that spot, back to the wall)
+// check_only: just say whether the step makes sense, don't move
+/////
+bool route_step(const std::string &step, bool check_only) {
+  std::istringstream in(step);
+  char op = 0;
+  double a = 0, b = 0, c = 0, d = 0;
+  in >> op;
+  int need = std::string("BF").find(op) != std::string::npos ? 1 : std::string("D").find(op) != std::string::npos ? 2
+           : std::string("SKCLG").find(op) != std::string::npos ? 3 : op == 'P' ? 4 : -1;
+  if (need < 0) return false;
+  double *args[] = {&a, &b, &c, &d};
+  for (int k = 0; k < need; k++)
+    if (!(in >> *args[k]) || !std::isfinite(*args[k])) return false;
+  bool has_xy = std::string("SDPKCLG").find(op) != std::string::npos;
+  if (has_xy && (std::fabs(a) > 72 || std::fabs(b) > 72)) return false;  // Off the field
+  if (check_only) return true;
+
+  logger::event("laptop step " + step);
+  switch (op) {
+    case 'B': blue = a != 0; break;
+    case 'S': start_at(Pose{{a, b}, c}); break;
+    case 'F': drive_forward(a); break;
+    case 'D': drive_to({a, b}); break;
+    case 'P': place(Goal{{a, b}, (int)c}, d); break;
+    case 'K': pick({a, b}, c); break;
+    case 'C': pick_cup({a, b}, c); break;
+    case 'L': load({a, b}, c); break;
+    case 'G': set_toggle(ToggleSpot{{a, b}, c}); break;
+  }
+  return true;
 }

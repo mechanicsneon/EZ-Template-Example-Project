@@ -53,6 +53,7 @@
 #include "assist.hpp"
 #include "logger.hpp"
 #include "setup.hpp"
+#include "laptop.hpp"
 
 
 /**

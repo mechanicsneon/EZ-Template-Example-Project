@@ -80,6 +80,7 @@ void initialize() {
 }
 
 void event(const std::string &text) {
+  laptop::event(text);  // Also to the laptop, if one is listening
   if (!file) return;
   std::lock_guard<pros::Mutex> lock(events_mutex);
   if (pending.size() < 50) pending.push_back(text);
